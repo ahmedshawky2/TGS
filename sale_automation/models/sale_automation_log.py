@@ -38,6 +38,14 @@ class saleAutomation(models.Model):
 
     product_same_inv = fields.Char(string="Product Same Invoice", store=True, required=True, index=True)
 
+    account_journal = fields.Char(string="Account Journal", store=True, required=True, index=True)
+
+    payment_amount_money = fields.Char(string="Payment Amount Money", store=True, required=True, index=True)
+
+    payment_amount_percent = fields.Char(string="Payment Amount Percent", store=True, required=True, index=True)
+
+    payment_amount_final = fields.Char(string="Payment Amount Final", store=True, required=True, index=True)
+
     sale_order_id = fields.Many2one(comodel_name="sale.order", string="Sales Order", store=True, required=False, index=True)
 
     delivery_id = fields.Many2one(comodel_name="stock.picking", string="Delivery", store=True, required=False, index=True)

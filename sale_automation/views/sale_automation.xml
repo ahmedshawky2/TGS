@@ -31,12 +31,18 @@
                 <form string="Sale Automation" create="true" edit="true" delete='true'>
                     <sheet>
                         <div class="oe_button_box" name="button_box">
-                            <header>
+                            <button name="action_sale_automation_log_tree_view" class="oe_stat_button" type="object" icon="fa fa-database">
+                                <field name="sale_automation_log_count" string="Orders" widget="statinfo"/>
+                            </button>
+                            <button name="action_sale_automation_log_tree_view" class="oe_stat_button" type="object" icon="fa-usd">
+                                <field name="sale_automation_log_money_total" string="" widget="statinfo"/>
+                            </button>
+                        </div>
+                        <header>
                                 <button type="object" name="runSA"
                                     string="Run" class="oe_highlight" custom="click" attrs="{'invisible': [('status', '!=', 'New')]}"/>
                                 <field name="status" widget="statusbar" attrs="{'clickable':[('true')]}"/>
                             </header>
-                        </div>
                         <group>
                             <group string="Sale Automation Details">
                                 <field name="name" readonly="1"/>

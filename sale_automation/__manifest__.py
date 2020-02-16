@@ -41,7 +41,4 @@
     'installable':True,
     'application': True,
     # only loaded in demonstration mode
-    'demo': [
-        'demo/demo.xml',
-    ],
 }

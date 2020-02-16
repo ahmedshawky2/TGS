@@ -40,6 +40,28 @@ class saleAutomation(models.Model):
 
     error = fields.Text(string="Error", store=True, required=False)
 
+    sale_automation_log_count = fields.Integer("Orders", compute='_compute_sale_automation_logs_count')
+
+    sale_automation_log_money_total = fields.Char("Total", compute='_compute_sale_automation_logs_money_total')
+
+    def _compute_sale_automation_logs_count(self):
+        for elem in self:
+            elem.sale_automation_log_count = self.env['sale_automation_log'].search_count([('sale_automation', '=', elem.id)])
+
+    def _compute_sale_automation_logs_money_total(self):
+        for elem in self:
+            total = 0.0
+            sale_automation_log_money_total_rec = self.env['sale_automation_log'].search([('sale_automation', '=', elem.id)])
+            for rec in sale_automation_log_money_total_rec:
+                total = total + float(rec[0]['payment_amount_final'])
+            elem.sale_automation_log_money_total = str(total)
+
+
+    def action_sale_automation_log_tree_view(self):
+        action = self.env.ref('sale_automation.sale_automation_log_ACTION').read()[0]
+        action['domain'] = [('sale_automation', '=', self.id)]
+        return action
+
 
     def runSA(self):
 
@@ -85,7 +107,32 @@ class saleAutomation(models.Model):
             saleOrderIdLog = None
             saleAutomationIdLog = self.id
 
+            totalInvAmountLog = None
+            amountPaymentMoney = None
+            amountPaymentPercent = None
+            amountPaymentAfterApplyPercent = None
+            accountJournal = None
+
+            finalPaymentAmount = None
+
+
             no_succ_rec = 0
+
+            checkPartialSuccess = False
+
+            if self.invoice_register_payment == True:
+                self.confirm_so = True
+                self.validate_delivery = True
+                self.create_invoice = True
+
+            if self.create_invoice == True:
+                self.confirm_so = True
+                self.validate_delivery = True
+
+            if self.validate_delivery == True:
+                self.confirm_so = True
+
+
 
             confirm_so = self.confirm_so
             validate_delivery = self.validate_delivery
@@ -189,6 +236,28 @@ class saleAutomation(models.Model):
                                     sheet.cell(row_no, col).value)))
                                 sameInvoice = str(sheet.cell(row_no, col).value)
 
+                            elif col == 8:
+                                _logger.info('Cell accountJournal ! "%s"' % (
+                                        "Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(
+                                    sheet.cell(row_no, col).value)))
+
+                                accountJournal = str(sheet.cell(row_no, col).value)
+
+                            elif col == 9:
+                                _logger.info('Cell amountPaymentMoney ! "%s"' % (
+                                        "Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(
+                                    sheet.cell(row_no, col).value)))
+
+                                amountPaymentMoney = str(sheet.cell(row_no, col).value)
+
+                            elif col == 10:
+                                _logger.info('Cell amountPaymentMoney ! "%s"' % (
+                                        "Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(
+                                    sheet.cell(row_no, col).value)))
+
+                                amountPaymentPercent = str(sheet.cell(row_no, col).value)
+
+
                         if sameInvoice != lastOrderCheck:
                             saleOrder = self.env['sale.order'].create({
                                 'partner_id': customerId,
@@ -285,18 +354,62 @@ class saleAutomation(models.Model):
                                                         str(accountInvoiceSearch[0]['id'])))
 
                                                     invoiceIdLog = accountInvoiceSearch[0]['id']
+                                                    totalInvAmountLog = accountInvoiceSearch[0]['amount_total']
 
                                                     _logger.info('account.invoice ==> action_invoice_open start')
                                                     self.pool.get('account.invoice').action_invoice_open(
                                                         accountInvoiceSearch)
                                                     _logger.info('account.invoice ==> action_invoice_open end')
 
+                                                    accountJournalSearch = self.env['account.journal'].search(
+                                                        [('name', '=', accountJournal)])
+                                                    _logger.info('accountJournal maged ! "%s"' % (str(accountJournalSearch)))
 
-                                                    if invoice_register_payment == True:
+
+                                                    if invoice_register_payment == True and accountJournalSearch is not None and accountJournalSearch != "":
                                                         _logger.info(
                                                             'account.payment ==> action_validate_invoice_payment start')
                                                         # accountInvoiceSearch.invoice_ids = [accountInvoiceSearch[0]['id']]
                                                         # self.pool.get('account.payment').action_validate_invoice_payment(invoice_ids=[accountInvoiceSearch[0]['id']])
+
+                                                        finalPaymentAmount = totalInvAmountLog
+
+                                                        if amountPaymentPercent is not None and amountPaymentPercent != "":
+                                                            if 0 < float(amountPaymentPercent) < 1:
+                                                                amountPaymentAfterApplyPercent = totalInvAmountLog * amountPaymentPercent
+                                                                finalPaymentAmount = amountPaymentAfterApplyPercent
+                                                                _logger.info('finalPaymentAmount 0 < amountPaymentPercent < 1 maged ! "%s"' % (str(finalPaymentAmount)))
+                                                            elif float(amountPaymentPercent) >= 1:
+                                                                finalPaymentAmount = totalInvAmountLog
+                                                                _logger.info(
+                                                                    'finalPaymentAmount amountPaymentPercent >= 1 maged ! "%s"' % (
+                                                                        str(finalPaymentAmount)))
+                                                            else:
+                                                                if float(amountPaymentMoney) >= float(totalInvAmountLog):
+                                                                    finalPaymentAmount = totalInvAmountLog
+                                                                    _logger.info(
+                                                                        'finalPaymentAmount amountPaymentMoney >= totalInvAmountLog maged ! "%s"' % (
+                                                                            str(finalPaymentAmount)))
+                                                                elif float(amountPaymentMoney) < float(totalInvAmountLog):
+                                                                    finalPaymentAmount = amountPaymentMoney
+                                                                    _logger.info(
+                                                                        'finalPaymentAmount amountPaymentMoney < totalInvAmountLog maged ! "%s"' % (
+                                                                            str(finalPaymentAmount)))
+                                                                    
+                                                        else:
+                                                            if amountPaymentMoney is not None and amountPaymentMoney != "":
+                                                                if float(amountPaymentMoney) >= float(totalInvAmountLog):
+                                                                    finalPaymentAmount = totalInvAmountLog
+                                                                    _logger.info(
+                                                                        'finalPaymentAmount else amountPaymentMoney >= totalInvAmountLog maged ! "%s"' % (
+                                                                            str(finalPaymentAmount)))
+                                                                elif float(amountPaymentMoney) < float(totalInvAmountLog):
+                                                                    finalPaymentAmount = amountPaymentMoney
+                                                                    _logger.info(
+                                                                        'finalPaymentAmount else amountPaymentMoney < totalInvAmountLog maged ! "%s"' % (
+                                                                            str(finalPaymentAmount)))
+
+
                                                         accountPayment = self.env['account.payment'].with_context(
                                                             active_ids=[accountInvoiceSearch[0]['id']],
                                                             active_id=accountInvoiceSearch[0]['id'],
@@ -304,8 +417,9 @@ class saleAutomation(models.Model):
                                                             'payment_type': 'inbound',
                                                             'partner_type': 'customer',
                                                             'payment_method_id': 1,
-                                                            'journal_id': 7,
-                                                            'amount': accountInvoiceSearch[0]['amount_total'],
+                                                            'journal_id': accountJournalSearch[0]['id'],
+                                                            #'amount': accountInvoiceSearch[0]['amount_total'],
+                                                            'amount': finalPaymentAmount,
                                                         })
                                                         # inv = dict({"invoice_ids":accountInvoiceSearch[0]['id']})
                                                         # _logger.info('inv maged ! "%s"' % (str(inv.invoice_ids)))
@@ -350,6 +464,10 @@ class saleAutomation(models.Model):
                                 'validate_delivery': validate_delivery,
                                 'create_invoice': create_invoice,
                                 'invoice_register_payment': invoice_register_payment,
+                                'account_journal': accountJournal,
+                                'payment_amount_money': amountPaymentMoney,
+                                'payment_amount_percent': amountPaymentPercent,
+                                'payment_amount_final': finalPaymentAmount,
                                 'status': 'Success',
                             })
 
@@ -420,17 +538,63 @@ class saleAutomation(models.Model):
                                                         str(accountInvoiceSearch[0]['id'])))
 
                                                     invoiceIdLog = accountInvoiceSearch[0]['id']
+                                                    totalInvAmountLog = accountInvoiceSearch[0]['amount_total']
 
                                                     _logger.info('account.invoice ==> action_invoice_open start')
                                                     self.pool.get('account.invoice').action_invoice_open(
                                                         accountInvoiceSearch)
                                                     _logger.info('account.invoice ==> action_invoice_open end')
 
-                                                    if invoice_register_payment == True:
+                                                    accountJournalSearch = self.env['account.journal'].search(
+                                                        [('name', '=', accountJournal)])
+                                                    _logger.info(
+                                                        'accountJournal maged ! "%s"' % (str(accountJournalSearch)))
+
+                                                    if invoice_register_payment == True and accountJournalSearch is not None and accountJournalSearch != "":
                                                         _logger.info(
                                                             'account.payment ==> action_validate_invoice_payment start')
                                                         # accountInvoiceSearch.invoice_ids = [accountInvoiceSearch[0]['id']]
                                                         # self.pool.get('account.payment').action_validate_invoice_payment(invoice_ids=[accountInvoiceSearch[0]['id']])
+
+                                                        finalPaymentAmount = totalInvAmountLog
+
+                                                        if amountPaymentPercent is not None and amountPaymentPercent != "":
+                                                            if 0 < float(amountPaymentPercent) < 1:
+                                                                amountPaymentAfterApplyPercent = totalInvAmountLog * amountPaymentPercent
+                                                                finalPaymentAmount = amountPaymentAfterApplyPercent
+                                                                _logger.info(
+                                                                    'finalPaymentAmount 0 < amountPaymentPercent < 1 maged ! "%s"' % (
+                                                                        str(finalPaymentAmount)))
+                                                            elif float(amountPaymentPercent) >= 1:
+                                                                finalPaymentAmount = totalInvAmountLog
+                                                                _logger.info(
+                                                                    'finalPaymentAmount amountPaymentPercent >= 1 maged ! "%s"' % (
+                                                                        str(finalPaymentAmount)))
+                                                            else:
+                                                                if float(amountPaymentMoney) >= float(totalInvAmountLog):
+                                                                    finalPaymentAmount = totalInvAmountLog
+                                                                    _logger.info(
+                                                                        'finalPaymentAmount amountPaymentMoney >= totalInvAmountLog maged ! "%s"' % (
+                                                                            str(finalPaymentAmount)))
+                                                                elif float(amountPaymentMoney) < float(totalInvAmountLog):
+                                                                    finalPaymentAmount = amountPaymentMoney
+                                                                    _logger.info(
+                                                                        'finalPaymentAmount amountPaymentMoney < totalInvAmountLog maged ! "%s"' % (
+                                                                            str(finalPaymentAmount)))
+
+                                                        else:
+                                                            if amountPaymentMoney is not None and amountPaymentMoney != "":
+                                                                if float(amountPaymentMoney) >= float(totalInvAmountLog):
+                                                                    finalPaymentAmount = totalInvAmountLog
+                                                                    _logger.info(
+                                                                        'finalPaymentAmount else amountPaymentMoney >= totalInvAmountLog maged ! "%s"' % (
+                                                                            str(finalPaymentAmount)))
+                                                                elif float(amountPaymentMoney) < float(totalInvAmountLog):
+                                                                    finalPaymentAmount = amountPaymentMoney
+                                                                    _logger.info(
+                                                                        'finalPaymentAmount else amountPaymentMoney < totalInvAmountLog maged ! "%s"' % (
+                                                                            str(finalPaymentAmount)))
+
                                                         accountPayment = self.env['account.payment'].with_context(
                                                             active_ids=[accountInvoiceSearch[0]['id']],
                                                             active_id=accountInvoiceSearch[0]['id'],
@@ -438,8 +602,9 @@ class saleAutomation(models.Model):
                                                             'payment_type': 'inbound',
                                                             'partner_type': 'customer',
                                                             'payment_method_id': 1,
-                                                            'journal_id': 7,
-                                                            'amount': accountInvoiceSearch[0]['amount_total'],
+                                                            'journal_id': accountJournalSearch[0]['id'],
+                                                            # 'amount': accountInvoiceSearch[0]['amount_total'],
+                                                            'amount': finalPaymentAmount,
                                                         })
                                                         # inv = dict({"invoice_ids":accountInvoiceSearch[0]['id']})
                                                         # _logger.info('inv maged ! "%s"' % (str(inv.invoice_ids)))
@@ -485,11 +650,17 @@ class saleAutomation(models.Model):
                                 'validate_delivery': validate_delivery,
                                 'create_invoice': create_invoice,
                                 'invoice_register_payment': invoice_register_payment,
+                                'account_journal': accountJournal,
+                                'payment_amount_money': amountPaymentMoney,
+                                'payment_amount_percent': amountPaymentPercent,
+                                'payment_amount_final': finalPaymentAmount,
                                 'status': 'Success',
                             })
 
+
                     except Exception as e:
                         _logger.info(u'ERROR: {}'.format(e))
+                        checkPartialSuccess = True
                         self.status = 'Partial Success'
                         saleAutomationId = self.env['sale_automation_log'].create({
                             'sale_automation': saleAutomationIdLog,
@@ -508,6 +679,10 @@ class saleAutomation(models.Model):
                             'validate_delivery': validate_delivery,
                             'create_invoice': create_invoice,
                             'invoice_register_payment': invoice_register_payment,
+                            'account_journal': accountJournal,
+                            'payment_amount_money': amountPaymentMoney,
+                            'payment_amount_percent': amountPaymentPercent,
+                            'payment_amount_final': finalPaymentAmount,
                             'status': 'Error',
                             'error': u'ERROR: {}'.format(e),
                         })
@@ -515,7 +690,8 @@ class saleAutomation(models.Model):
                         # raise ValidationError(u'ERROR: {}'.format(e))
 
             self.no_success_rec = no_succ_rec
-            self.status = 'Success'
+            if checkPartialSuccess == False:
+                self.status = 'Success'
         except Exception as e:
             _logger.info(u'ERROR: {}'.format(e))
             self.status = 'Error'
