@@ -31,7 +31,7 @@
                 <form string="Sale Automation" create="true" edit="true" delete='true'>
                     <sheet>
                         <div class="oe_button_box" name="button_box">
-                            <button name="action_sale_automation_log_tree_view" class="oe_stat_button" type="object" icon="fa fa-database">
+                            <button name="action_sale_automation_log_tree_view" class="oe_stat_button" type="object" icon="fa-area-chart">
                                 <field name="sale_automation_log_count" string="Orders" widget="statinfo"/>
                             </button>
                             <button name="action_sale_automation_log_tree_view" class="oe_stat_button" type="object" icon="fa-usd">
@@ -39,10 +39,10 @@
                             </button>
                         </div>
                         <header>
-                                <button type="object" name="runSA"
-                                    string="Run" class="oe_highlight" custom="click" attrs="{'invisible': [('status', '!=', 'New')]}"/>
-                                <field name="status" widget="statusbar" attrs="{'clickable':[('true')]}"/>
-                            </header>
+                            <button type="object" name="runSA" string="Run" class="oe_highlight" custom="click" attrs="{'invisible': [('status', '!=', 'New')]}"/>
+                            <button type="object" name="checkSA" string="check" class="oe_highlight" custom="click" attrs="{'invisible': [('status', '!=', 'Partial Success')]}"/>
+                            <field name="status" widget="statusbar" attrs="{'clickable':[('true')]}"/>
+                        </header>
                         <group>
                             <group string="Sale Automation Details">
                                 <field name="name" readonly="1"/>
