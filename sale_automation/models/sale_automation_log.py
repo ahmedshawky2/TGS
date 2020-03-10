@@ -13,7 +13,7 @@ _logger = logging.getLogger(__name__)
 class saleAutomation(models.Model):
     _name = 'sale_automation_log'
     _description = "Sale Automation Log"
-    _order = 'write_date desc'
+    _order = 'create_date desc'
 
 
 
@@ -60,8 +60,16 @@ class saleAutomation(models.Model):
 
     create_invoice = fields.Boolean(string="Create Invoice", store=True, index=True, track_visibility='onchange')
 
+    post_invoice = fields.Boolean(string="Post Invoice", store=True, index=True, track_visibility='onchange')
+
     invoice_register_payment = fields.Boolean(string="Invoice Register Payment", store=True, index=True,
                                               track_visibility='onchange')
+
+    date_submit = fields.Datetime(string='Submit Date', required=True, index=True, default=fields.Datetime.now,
+                                  help="Bulk automation Date")
+
+    x_external_order_id = fields.Char(string="External Order Id", store=True, required=False, index=True,
+                                      track_visibility="onchange")
 
 
     def reRunSALog(self):
@@ -103,6 +111,7 @@ class saleAutomation(models.Model):
                 saleOrderDeliveryName = stockPickingSearch[0]['name']
                 saleOrderDeliveryStatus = stockPickingSearch[0]['state']
                 saleOrderDeliveryId = stockPickingSearch[0]['id']
+                stockPickingSearch[0]['scheduled_date'] = self.date_submit
                 self.delivery_id = saleOrderDeliveryId
                 self.status = 'Success'
                 _logger.debug('saleOrderDeliveryStatus minds ! "%s"' % (str(saleOrderDeliveryStatus)))
@@ -141,12 +150,13 @@ class saleAutomation(models.Model):
                     stockPickingSearch.button_validate()
                     self.pool.get('stock.picking').button_validate(stockPickingSearch)
                     _logger.debug('stock.picking ==> button_validate end')
+                    stockPickingSearch[0]['date_done'] = self.date_submit
                     self.status = 'Success'
 
 
             if self.create_invoice == True:
                 _logger.debug('self.inv_id minds ! "%s"' % (str(int(self.inv_id))))
-                if int(self.inv_id) != 0:
+                if int(self.inv_id) != 0 and self.post_invoice == True:
                     accountInvoiceSearch = self.env['account.move'].search([('id', '=', int(self.inv_id))])
                     _logger.debug('accountInvoiceSearch minds ! "%s"' % (str(accountInvoiceSearch)))
 
@@ -154,6 +164,8 @@ class saleAutomation(models.Model):
                     _logger.debug('accountInvoiceSearch minds ! "%s"' % (str(accountInvoiceSearch[0]['id'])))
                     invoiceIdLog = accountInvoiceSearch[0]['id']
                     totalInvAmountLog = accountInvoiceSearch[0]['amount_total']
+                    accountInvoiceSearch[0]['invoice_date'] = self.date_submit
+                    accountInvoiceSearch[0]['invoice_date_due'] = self.date_submit
 
                     if accountInvoiceSearch and accountInvoiceSearch['state'] == "draft":
 
@@ -233,86 +245,90 @@ class saleAutomation(models.Model):
                     payment.create_invoices()
                     _logger.debug('sale.advance.payment.inv ==> create_invoices end')
 
-                    accountInvoiceSearch = self.env['account.move'].search([('invoice_origin', '=', saleOrderName)])
-                    _logger.debug('accountInvoiceSearch minds ! "%s"' % (str(accountInvoiceSearch)))
-                    self.inv_id = accountInvoiceSearch[0]['id']
+                    if self.post_invoice == True:
 
-                    accountJournalSearch = self.env['account.journal'].search([('name', '=', accountJournal)])
-                    _logger.debug('accountInvoiceSearch minds ! "%s"' % (str(accountInvoiceSearch[0]['id'])))
-                    invoiceIdLog = accountInvoiceSearch[0]['id']
-                    totalInvAmountLog = accountInvoiceSearch[0]['amount_total']
+                        accountInvoiceSearch = self.env['account.move'].search([('invoice_origin', '=', saleOrderName)])
+                        _logger.debug('accountInvoiceSearch minds ! "%s"' % (str(accountInvoiceSearch)))
+                        self.inv_id = accountInvoiceSearch[0]['id']
 
-                    if accountInvoiceSearch and accountInvoiceSearch['state'] == "draft":
+                        accountJournalSearch = self.env['account.journal'].search([('name', '=', accountJournal)])
+                        _logger.debug('accountInvoiceSearch minds ! "%s"' % (str(accountInvoiceSearch[0]['id'])))
+                        invoiceIdLog = accountInvoiceSearch[0]['id']
+                        totalInvAmountLog = accountInvoiceSearch[0]['amount_total']
+                        accountInvoiceSearch[0]['invoice_date'] = self.date_submit
+                        accountInvoiceSearch[0]['invoice_date_due'] = self.date_submit
 
-                        _logger.debug('account.move ==> action_post start')
-                        self.pool.get('account.move').action_post(accountInvoiceSearch)
-                        _logger.debug('account.move ==> action_post end')
+                        if accountInvoiceSearch and accountInvoiceSearch['state'] == "draft":
 
-                        _logger.debug('accountJournal minds ! "%s"' % (str(accountJournalSearch)))
-                        self.status = 'Success'
+                            _logger.debug('account.move ==> action_post start')
+                            self.pool.get('account.move').action_post(accountInvoiceSearch)
+                            _logger.debug('account.move ==> action_post end')
 
-                    if self.invoice_register_payment == True and accountJournalSearch is not None and accountJournalSearch != "":
-                        _logger.debug('account.payment ==> action_validate_invoice_payment start')
+                            _logger.debug('accountJournal minds ! "%s"' % (str(accountJournalSearch)))
+                            self.status = 'Success'
 
-                        finalPaymentAmount = totalInvAmountLog
-                        _logger.debug('finalPaymentAmount minds ! "%s"' % (str(finalPaymentAmount)))
+                        if self.invoice_register_payment == True and accountJournalSearch is not None and accountJournalSearch != "":
+                            _logger.debug('account.payment ==> action_validate_invoice_payment start')
 
-                        if amountPaymentPercent is not None and amountPaymentPercent != "":
-                            if 0 < float(amountPaymentPercent) < 1:
-                                amountPaymentAfterApplyPercent = totalInvAmountLog * amountPaymentPercent
-                                finalPaymentAmount = amountPaymentAfterApplyPercent
-                                _logger.debug('finalPaymentAmount 0 < amountPaymentPercent < 1 minds ! "%s"' % (
-                                    str(finalPaymentAmount)))
-                            elif float(amountPaymentPercent) >= 1:
-                                finalPaymentAmount = totalInvAmountLog
-                                _logger.debug('finalPaymentAmount amountPaymentPercent >= 1 minds ! "%s"' % (str(finalPaymentAmount)))
+                            finalPaymentAmount = totalInvAmountLog
+                            _logger.debug('finalPaymentAmount minds ! "%s"' % (str(finalPaymentAmount)))
+
+                            if amountPaymentPercent is not None and amountPaymentPercent != "":
+                                if 0 < float(amountPaymentPercent) < 1:
+                                    amountPaymentAfterApplyPercent = totalInvAmountLog * amountPaymentPercent
+                                    finalPaymentAmount = amountPaymentAfterApplyPercent
+                                    _logger.debug('finalPaymentAmount 0 < amountPaymentPercent < 1 minds ! "%s"' % (
+                                        str(finalPaymentAmount)))
+                                elif float(amountPaymentPercent) >= 1:
+                                    finalPaymentAmount = totalInvAmountLog
+                                    _logger.debug('finalPaymentAmount amountPaymentPercent >= 1 minds ! "%s"' % (str(finalPaymentAmount)))
+                                else:
+                                    if float(amountPaymentMoney) >= float(totalInvAmountLog):
+                                        finalPaymentAmount = totalInvAmountLog
+                                        _logger.debug('finalPaymentAmount amountPaymentMoney >= totalInvAmountLog minds ! "%s"' % (str(finalPaymentAmount)))
+                                    elif float(amountPaymentMoney) < float(totalInvAmountLog):
+                                        finalPaymentAmount = amountPaymentMoney
+                                        _logger.debug('finalPaymentAmount amountPaymentMoney < totalInvAmountLog minds ! "%s"' % (str(finalPaymentAmount)))
+
                             else:
-                                if float(amountPaymentMoney) >= float(totalInvAmountLog):
-                                    finalPaymentAmount = totalInvAmountLog
-                                    _logger.debug('finalPaymentAmount amountPaymentMoney >= totalInvAmountLog minds ! "%s"' % (str(finalPaymentAmount)))
-                                elif float(amountPaymentMoney) < float(totalInvAmountLog):
-                                    finalPaymentAmount = amountPaymentMoney
-                                    _logger.debug('finalPaymentAmount amountPaymentMoney < totalInvAmountLog minds ! "%s"' % (str(finalPaymentAmount)))
+                                if amountPaymentMoney is not None and amountPaymentMoney != "":
+                                    if float(amountPaymentMoney) >= float(totalInvAmountLog):
+                                        finalPaymentAmount = totalInvAmountLog
+                                        _logger.debug('finalPaymentAmount else amountPaymentMoney >= totalInvAmountLog minds ! "%s"' % (str(finalPaymentAmount)))
+                                    elif float(amountPaymentMoney) < float(totalInvAmountLog):
+                                        finalPaymentAmount = amountPaymentMoney
+                                        _logger.debug('finalPaymentAmount else amountPaymentMoney < totalInvAmountLog minds ! "%s"' % (str(finalPaymentAmount)))
 
-                        else:
-                            if amountPaymentMoney is not None and amountPaymentMoney != "":
-                                if float(amountPaymentMoney) >= float(totalInvAmountLog):
-                                    finalPaymentAmount = totalInvAmountLog
-                                    _logger.debug('finalPaymentAmount else amountPaymentMoney >= totalInvAmountLog minds ! "%s"' % (str(finalPaymentAmount)))
-                                elif float(amountPaymentMoney) < float(totalInvAmountLog):
-                                    finalPaymentAmount = amountPaymentMoney
-                                    _logger.debug('finalPaymentAmount else amountPaymentMoney < totalInvAmountLog minds ! "%s"' % (str(finalPaymentAmount)))
-
-                        accountPayment = self.env['account.payment'].with_context(
-                            active_ids=[accountInvoiceSearch[0]['id']],
-                            active_id=accountInvoiceSearch[0]['id'],
-                            invoice_ids=[accountInvoiceSearch[0]['id']]).create({
-                            'payment_type': 'inbound',
-                            'partner_type': 'customer',
-                            'payment_method_id': 1,
-                            'journal_id': accountJournalSearch[0]['id'],
-                            'amount': finalPaymentAmount,
-                        })
-                        if accountPayment.payment_type == 'transfer':
-                            sequence_code = 'account.payment.transfer'
-                        else:
-                            if accountPayment.partner_type == 'customer':
-                                if accountPayment.payment_type == 'inbound':
-                                    sequence_code = 'account.payment.customer.invoice'
-                                if accountPayment.payment_type == 'outbound':
-                                    sequence_code = 'account.payment.customer.refund'
-                            if accountPayment.partner_type == 'supplier':
-                                if accountPayment.payment_type == 'inbound':
-                                    sequence_code = 'account.payment.supplier.refund'
-                                if accountPayment.payment_type == 'outbound':
-                                    sequence_code = 'account.payment.supplier.invoice'
-                        accountPayment.name = self.env['ir.sequence'].with_context(
-                            ir_sequence_date=accountPayment.payment_date).next_by_code(
-                            sequence_code)
-                        accountPayment.invoice_ids = [accountInvoiceSearch[0]['id']]
-                        accountPayment.post()
-                        _logger.debug('account.payment ==> action_validate_invoice_payment end')
-                        self.status = 'Success'
+                            accountPayment = self.env['account.payment'].with_context(
+                                active_ids=[accountInvoiceSearch[0]['id']],
+                                active_id=accountInvoiceSearch[0]['id'],
+                                invoice_ids=[accountInvoiceSearch[0]['id']]).create({
+                                'payment_type': 'inbound',
+                                'partner_type': 'customer',
+                                'payment_method_id': 1,
+                                'journal_id': accountJournalSearch[0]['id'],
+                                'amount': finalPaymentAmount,
+                            })
+                            if accountPayment.payment_type == 'transfer':
+                                sequence_code = 'account.payment.transfer'
+                            else:
+                                if accountPayment.partner_type == 'customer':
+                                    if accountPayment.payment_type == 'inbound':
+                                        sequence_code = 'account.payment.customer.invoice'
+                                    if accountPayment.payment_type == 'outbound':
+                                        sequence_code = 'account.payment.customer.refund'
+                                if accountPayment.partner_type == 'supplier':
+                                    if accountPayment.payment_type == 'inbound':
+                                        sequence_code = 'account.payment.supplier.refund'
+                                    if accountPayment.payment_type == 'outbound':
+                                        sequence_code = 'account.payment.supplier.invoice'
+                            accountPayment.name = self.env['ir.sequence'].with_context(
+                                ir_sequence_date=accountPayment.payment_date).next_by_code(
+                                sequence_code)
+                            accountPayment.invoice_ids = [accountInvoiceSearch[0]['id']]
+                            accountPayment.post()
+                            _logger.debug('account.payment ==> action_validate_invoice_payment end')
+                            self.status = 'Success'
 
         except Exception as e:
             _logger.debug(u'ERROR: {}'.format(e))

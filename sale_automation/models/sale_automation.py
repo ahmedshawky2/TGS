@@ -13,7 +13,7 @@ _logger = logging.getLogger(__name__)
 class saleAutomation(models.Model):
     _name = 'sale_automation'
     _description = "Sale Automation"
-    _order = 'write_date desc'
+    _order = 'create_date desc'
 
 
 
@@ -37,6 +37,8 @@ class saleAutomation(models.Model):
 
     create_invoice = fields.Boolean(string="Create Invoice", store=True, index=True,track_visibility='onchange')
 
+    post_invoice = fields.Boolean(string="Post Invoice", store=True, index=True,track_visibility='onchange')
+
     invoice_register_payment = fields.Boolean(string="Invoice Register Payment", store=True, index=True,track_visibility='onchange')
 
     error = fields.Text(string="Error", store=True, required=False)
@@ -44,6 +46,8 @@ class saleAutomation(models.Model):
     sale_automation_log_count = fields.Integer("Orders", compute='_compute_sale_automation_logs_count')
 
     sale_automation_log_money_total = fields.Char("Total", compute='_compute_sale_automation_logs_money_total')
+
+    date_submit = fields.Datetime(string='Submit Date', required=True, index=True, default=fields.Datetime.now, help="Bulk automation Date")
 
     def _compute_sale_automation_logs_count(self):
         for elem in self:
@@ -72,6 +76,60 @@ class saleAutomation(models.Model):
         vals['name'] = self.env['ir.sequence'].next_by_code('sale_automation_name')
         result = super(saleAutomation, self).create(vals)
         return result
+
+
+    def testSA(self):
+
+        inputx = BytesIO()
+        _logger.debug('inputx minds ! "%s"' % (str("inputx")))
+        inputx.write(base64.decodestring(self.excel_file))
+        book = xlrd.open_workbook(file_contents=inputx.getvalue())
+        _logger.debug('book minds ! "%s"' % (str(book)))
+
+        # sheet = book.sheets()[0]
+        sheet = book.sheet_by_index(0)
+        _logger.debug('sheet minds ! "%s"' % (str(sheet)))
+
+        sameInvoice = None
+        lastOrderCheck = None
+        finalRes = "Please remove the below orders from the excel file: \n\n"
+        finalResCount = 0
+        duplicated = "External order id is duplicated in the excel file as below: \n\n"
+        duplicatedCount = 0
+        all = ""
+
+        for row_no in range(sheet.nrows):
+            if row_no > 0:
+
+                for col in range(sheet.ncols):
+
+                    if col == 7:
+                        _logger.debug('Cell sameInvoice ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
+                        sameInvoice = str(sheet.cell(row_no, col).value)
+
+
+                if sameInvoice != lastOrderCheck:
+                    saleOrderSearch = self.env['sale.order'].search([('x_external_order_id', '=', sameInvoice)])
+                    _logger.debug('saleOrderSearch minds ! "%s"' % (str(saleOrderSearch)))
+
+                    if saleOrderSearch:
+                        finalRes = finalRes + "External order id: " + sameInvoice + " is assigned to Order: " + saleOrderSearch[0]['name'] + "\n"
+                        finalResCount = finalResCount + 1
+
+                    if sameInvoice in all:
+                        duplicated = duplicated + "External order id: " + sameInvoice + "\n"
+                        duplicatedCount = duplicatedCount + 1
+
+                    all = all + sameInvoice
+
+                lastOrderCheck = sameInvoice
+
+        if finalResCount > 0:
+            raise ValidationError(finalRes)
+        elif duplicatedCount > 0:
+            raise ValidationError(duplicated)
+        else:
+            raise ValidationError("Tested successfully ...")
 
 
     def runSA(self):
@@ -135,6 +193,12 @@ class saleAutomation(models.Model):
                 self.confirm_so = True
                 self.validate_delivery = True
                 self.create_invoice = True
+                self.post_invoice = True
+
+            if self.post_invoice == True:
+                self.confirm_so = True
+                self.validate_delivery = True
+                self.create_invoice = True
 
             if self.create_invoice == True:
                 self.confirm_so = True
@@ -149,6 +213,7 @@ class saleAutomation(models.Model):
             validate_delivery = self.validate_delivery
             create_invoice = self.create_invoice
             invoice_register_payment = self.invoice_register_payment
+            post_invoice = self.post_invoice
 
             product_uom = self.env['uom.uom'].search([('name', '=', 'Units')])
             _logger.debug('product_uom minds ! "%s"' % (str(product_uom)))
@@ -156,6 +221,8 @@ class saleAutomation(models.Model):
             _logger.debug('product_uom_id minds ! "%s"' % (str(product_uom)))
 
             self.no_initial_rec = sheet.nrows
+
+            date_submit = self.date_submit
 
             for row_no in range(sheet.nrows):
                 if row_no > 0:
@@ -261,6 +328,8 @@ class saleAutomation(models.Model):
                             saleOrder = self.env['sale.order'].create({
                                 'partner_id': customerId,
                                 'user_id': salesPersonUserId,
+                                'date_order': date_submit,
+                                'x_external_order_id': sameInvoice,
                             })
 
                             createdOrderId = int(saleOrder)
@@ -296,6 +365,8 @@ class saleAutomation(models.Model):
                                 saleOrderName = saleOrderSearch[0]['name']
                                 _logger.debug('saleOrderName minds ! "%s"' % (str(saleOrderName)))
 
+                                saleOrderSearch[0]['date_order'] = date_submit
+
                                 if saleOrderName is not None and saleOrderName != "":
                                     stockPickingSearch = self.env['stock.picking'].search(
                                         [('origin', '=', saleOrderName)])
@@ -309,6 +380,9 @@ class saleAutomation(models.Model):
                                         if saleOrderDeliveryName is not None and saleOrderDeliveryName != "" and validate_delivery == True:
                                             saleOrderDeliveryId = stockPickingSearch[0]['id']
                                             deliveryIdLog = stockPickingSearch[0]['id']
+
+                                            stockPickingSearch[0]['scheduled_date'] = date_submit
+
                                             _logger.debug(
                                                 'saleOrderDeliveryId minds ! "%s"' % (str(saleOrderDeliveryId)))
 
@@ -333,6 +407,8 @@ class saleAutomation(models.Model):
                                             self.pool.get('stock.picking').button_validate(stockPickingSearch)
                                             _logger.debug('stock.picking ==> button_validate end')
 
+                                            stockPickingSearch[0]['date_done'] = date_submit
+
                                             if create_invoice == True:
                                                 _logger.debug('sale.advance.payment.inv ==> create_invoices start')
                                                 # self.pool.get('sale.advance.payment.inv').create_invoices(saleOrderSearch)
@@ -354,95 +430,97 @@ class saleAutomation(models.Model):
 
                                                     invoiceIdLog = accountInvoiceSearch[0]['id']
                                                     totalInvAmountLog = accountInvoiceSearch[0]['amount_total']
+                                                    accountInvoiceSearch[0]['invoice_date'] = date_submit
+                                                    accountInvoiceSearch[0]['invoice_date_due'] = date_submit
+                                                    if post_invoice == True:
+                                                        _logger.debug('account.move ==> action_post start')
+                                                        self.pool.get('account.move').action_post(
+                                                            accountInvoiceSearch)
+                                                        _logger.debug('account.move ==> action_post end')
 
-                                                    _logger.debug('account.move ==> action_post start')
-                                                    self.pool.get('account.move').action_post(
-                                                        accountInvoiceSearch)
-                                                    _logger.debug('account.move ==> action_post end')
-
-                                                    accountJournalSearch = self.env['account.journal'].search(
-                                                        [('name', '=', accountJournal)])
-                                                    _logger.debug('accountJournal minds ! "%s"' % (str(accountJournalSearch)))
+                                                        accountJournalSearch = self.env['account.journal'].search(
+                                                            [('name', '=', accountJournal)])
+                                                        _logger.debug('accountJournal minds ! "%s"' % (str(accountJournalSearch)))
 
 
-                                                    if invoice_register_payment == True and accountJournalSearch is not None and accountJournalSearch != "":
-                                                        _logger.debug(
-                                                            'account.payment ==> action_validate_invoice_payment start')
-                                                        # accountInvoiceSearch.invoice_ids = [accountInvoiceSearch[0]['id']]
-                                                        # self.pool.get('account.payment').action_validate_invoice_payment(invoice_ids=[accountInvoiceSearch[0]['id']])
+                                                        if invoice_register_payment == True and accountJournalSearch is not None and accountJournalSearch != "":
+                                                            _logger.debug(
+                                                                'account.payment ==> action_validate_invoice_payment start')
+                                                            # accountInvoiceSearch.invoice_ids = [accountInvoiceSearch[0]['id']]
+                                                            # self.pool.get('account.payment').action_validate_invoice_payment(invoice_ids=[accountInvoiceSearch[0]['id']])
 
-                                                        finalPaymentAmount = totalInvAmountLog
+                                                            finalPaymentAmount = totalInvAmountLog
 
-                                                        if amountPaymentPercent is not None and amountPaymentPercent != "":
-                                                            if 0 < float(amountPaymentPercent) < 1:
-                                                                amountPaymentAfterApplyPercent = totalInvAmountLog * amountPaymentPercent
-                                                                finalPaymentAmount = amountPaymentAfterApplyPercent
-                                                                _logger.debug('finalPaymentAmount 0 < amountPaymentPercent < 1 minds ! "%s"' % (str(finalPaymentAmount)))
-                                                            elif float(amountPaymentPercent) >= 1:
-                                                                finalPaymentAmount = totalInvAmountLog
-                                                                _logger.debug(
-                                                                    'finalPaymentAmount amountPaymentPercent >= 1 minds ! "%s"' % (
-                                                                        str(finalPaymentAmount)))
+                                                            if amountPaymentPercent is not None and amountPaymentPercent != "":
+                                                                if 0 < float(amountPaymentPercent) < 1:
+                                                                    amountPaymentAfterApplyPercent = totalInvAmountLog * amountPaymentPercent
+                                                                    finalPaymentAmount = amountPaymentAfterApplyPercent
+                                                                    _logger.debug('finalPaymentAmount 0 < amountPaymentPercent < 1 minds ! "%s"' % (str(finalPaymentAmount)))
+                                                                elif float(amountPaymentPercent) >= 1:
+                                                                    finalPaymentAmount = totalInvAmountLog
+                                                                    _logger.debug(
+                                                                        'finalPaymentAmount amountPaymentPercent >= 1 minds ! "%s"' % (
+                                                                            str(finalPaymentAmount)))
+                                                                else:
+                                                                    if float(amountPaymentMoney) >= float(totalInvAmountLog):
+                                                                        finalPaymentAmount = totalInvAmountLog
+                                                                        _logger.debug(
+                                                                            'finalPaymentAmount amountPaymentMoney >= totalInvAmountLog minds ! "%s"' % (
+                                                                                str(finalPaymentAmount)))
+                                                                    elif float(amountPaymentMoney) < float(totalInvAmountLog):
+                                                                        finalPaymentAmount = amountPaymentMoney
+                                                                        _logger.debug(
+                                                                            'finalPaymentAmount amountPaymentMoney < totalInvAmountLog minds ! "%s"' % (
+                                                                                str(finalPaymentAmount)))
+
                                                             else:
-                                                                if float(amountPaymentMoney) >= float(totalInvAmountLog):
-                                                                    finalPaymentAmount = totalInvAmountLog
-                                                                    _logger.debug(
-                                                                        'finalPaymentAmount amountPaymentMoney >= totalInvAmountLog minds ! "%s"' % (
-                                                                            str(finalPaymentAmount)))
-                                                                elif float(amountPaymentMoney) < float(totalInvAmountLog):
-                                                                    finalPaymentAmount = amountPaymentMoney
-                                                                    _logger.debug(
-                                                                        'finalPaymentAmount amountPaymentMoney < totalInvAmountLog minds ! "%s"' % (
-                                                                            str(finalPaymentAmount)))
-                                                                    
-                                                        else:
-                                                            if amountPaymentMoney is not None and amountPaymentMoney != "":
-                                                                if float(amountPaymentMoney) >= float(totalInvAmountLog):
-                                                                    finalPaymentAmount = totalInvAmountLog
-                                                                    _logger.debug(
-                                                                        'finalPaymentAmount else amountPaymentMoney >= totalInvAmountLog minds ! "%s"' % (
-                                                                            str(finalPaymentAmount)))
-                                                                elif float(amountPaymentMoney) < float(totalInvAmountLog):
-                                                                    finalPaymentAmount = amountPaymentMoney
-                                                                    _logger.debug(
-                                                                        'finalPaymentAmount else amountPaymentMoney < totalInvAmountLog minds ! "%s"' % (
-                                                                            str(finalPaymentAmount)))
+                                                                if amountPaymentMoney is not None and amountPaymentMoney != "":
+                                                                    if float(amountPaymentMoney) >= float(totalInvAmountLog):
+                                                                        finalPaymentAmount = totalInvAmountLog
+                                                                        _logger.debug(
+                                                                            'finalPaymentAmount else amountPaymentMoney >= totalInvAmountLog minds ! "%s"' % (
+                                                                                str(finalPaymentAmount)))
+                                                                    elif float(amountPaymentMoney) < float(totalInvAmountLog):
+                                                                        finalPaymentAmount = amountPaymentMoney
+                                                                        _logger.debug(
+                                                                            'finalPaymentAmount else amountPaymentMoney < totalInvAmountLog minds ! "%s"' % (
+                                                                                str(finalPaymentAmount)))
 
 
-                                                        accountPayment = self.env['account.payment'].with_context(
-                                                            active_ids=[accountInvoiceSearch[0]['id']],
-                                                            active_id=accountInvoiceSearch[0]['id'],
-                                                            invoice_ids=[accountInvoiceSearch[0]['id']]).create({
-                                                            'payment_type': 'inbound',
-                                                            'partner_type': 'customer',
-                                                            'payment_method_id': 1,
-                                                            'journal_id': accountJournalSearch[0]['id'],
-                                                            #'amount': accountInvoiceSearch[0]['amount_total'],
-                                                            'amount': finalPaymentAmount,
-                                                        })
-                                                        # inv = dict({"invoice_ids":accountInvoiceSearch[0]['id']})
-                                                        # _logger.debug('inv minds ! "%s"' % (str(inv.invoice_ids)))
-                                                        if accountPayment.payment_type == 'transfer':
-                                                            sequence_code = 'account.payment.transfer'
-                                                        else:
-                                                            if accountPayment.partner_type == 'customer':
-                                                                if accountPayment.payment_type == 'inbound':
-                                                                    sequence_code = 'account.payment.customer.invoice'
-                                                                if accountPayment.payment_type == 'outbound':
-                                                                    sequence_code = 'account.payment.customer.refund'
-                                                            if accountPayment.partner_type == 'supplier':
-                                                                if accountPayment.payment_type == 'inbound':
-                                                                    sequence_code = 'account.payment.supplier.refund'
-                                                                if accountPayment.payment_type == 'outbound':
-                                                                    sequence_code = 'account.payment.supplier.invoice'
-                                                        accountPayment.name = self.env['ir.sequence'].with_context(
-                                                            ir_sequence_date=accountPayment.payment_date).next_by_code(
-                                                            sequence_code)
-                                                        accountPayment.invoice_ids = [accountInvoiceSearch[0]['id']]
-                                                        accountPayment.post()
-                                                        # self.pool.get('account.payment').action_validate_invoice_payment(
-                                                        # self.env['account.payment'].search([('id', '=', int(accountPayment))]))
-                                                        _logger.debug('account.payment ==> action_validate_invoice_payment end')
+                                                            accountPayment = self.env['account.payment'].with_context(
+                                                                active_ids=[accountInvoiceSearch[0]['id']],
+                                                                active_id=accountInvoiceSearch[0]['id'],
+                                                                invoice_ids=[accountInvoiceSearch[0]['id']]).create({
+                                                                'payment_type': 'inbound',
+                                                                'partner_type': 'customer',
+                                                                'payment_method_id': 1,
+                                                                'journal_id': accountJournalSearch[0]['id'],
+                                                                #'amount': accountInvoiceSearch[0]['amount_total'],
+                                                                'amount': finalPaymentAmount,
+                                                            })
+                                                            # inv = dict({"invoice_ids":accountInvoiceSearch[0]['id']})
+                                                            # _logger.debug('inv minds ! "%s"' % (str(inv.invoice_ids)))
+                                                            if accountPayment.payment_type == 'transfer':
+                                                                sequence_code = 'account.payment.transfer'
+                                                            else:
+                                                                if accountPayment.partner_type == 'customer':
+                                                                    if accountPayment.payment_type == 'inbound':
+                                                                        sequence_code = 'account.payment.customer.invoice'
+                                                                    if accountPayment.payment_type == 'outbound':
+                                                                        sequence_code = 'account.payment.customer.refund'
+                                                                if accountPayment.partner_type == 'supplier':
+                                                                    if accountPayment.payment_type == 'inbound':
+                                                                        sequence_code = 'account.payment.supplier.refund'
+                                                                    if accountPayment.payment_type == 'outbound':
+                                                                        sequence_code = 'account.payment.supplier.invoice'
+                                                            accountPayment.name = self.env['ir.sequence'].with_context(
+                                                                ir_sequence_date=accountPayment.payment_date).next_by_code(
+                                                                sequence_code)
+                                                            accountPayment.invoice_ids = [accountInvoiceSearch[0]['id']]
+                                                            accountPayment.post()
+                                                            # self.pool.get('account.payment').action_validate_invoice_payment(
+                                                            # self.env['account.payment'].search([('id', '=', int(accountPayment))]))
+                                                            _logger.debug('account.payment ==> action_validate_invoice_payment end')
 
                             no_succ_rec = no_succ_rec + 1
 
@@ -462,12 +540,15 @@ class saleAutomation(models.Model):
                                 'confirm_so': confirm_so,
                                 'validate_delivery': validate_delivery,
                                 'create_invoice': create_invoice,
+                                'post_invoice': post_invoice,
                                 'invoice_register_payment': invoice_register_payment,
                                 'account_journal': accountJournal,
                                 'payment_amount_money': amountPaymentMoney,
                                 'payment_amount_percent': amountPaymentPercent,
                                 'payment_amount_final': finalPaymentAmount,
                                 'status': 'Success',
+                                'date_submit': date_submit,
+                                'x_external_order_id': sameInvoice,
                             })
 
 
@@ -480,6 +561,8 @@ class saleAutomation(models.Model):
                                 saleOrderName = saleOrderSearch[0]['name']
                                 _logger.debug('saleOrderName minds ! "%s"' % (str(saleOrderName)))
 
+                                saleOrderSearch[0]['date_order'] = date_submit
+
                                 if saleOrderName is not None and saleOrderName != "":
                                     stockPickingSearch = self.env['stock.picking'].search(
                                         [('origin', '=', saleOrderName)])
@@ -493,6 +576,7 @@ class saleAutomation(models.Model):
                                         if saleOrderDeliveryName is not None and saleOrderDeliveryName != "" and validate_delivery == True:
                                             saleOrderDeliveryId = stockPickingSearch[0]['id']
                                             deliveryIdLog = stockPickingSearch[0]['id']
+                                            stockPickingSearch[0]['scheduled_date'] = date_submit
                                             _logger.debug(
                                                 'saleOrderDeliveryId minds ! "%s"' % (str(saleOrderDeliveryId)))
 
@@ -517,6 +601,8 @@ class saleAutomation(models.Model):
                                             self.pool.get('stock.picking').button_validate(stockPickingSearch)
                                             _logger.debug('stock.picking ==> button_validate end')
 
+                                            stockPickingSearch[0]['date_done'] = date_submit
+
                                             if create_invoice == True:
                                                 _logger.debug('sale.advance.payment.inv ==> create_invoices start')
                                                 # self.pool.get('sale.advance.payment.inv').create_invoices(saleOrderSearch)
@@ -538,97 +624,99 @@ class saleAutomation(models.Model):
 
                                                     invoiceIdLog = accountInvoiceSearch[0]['id']
                                                     totalInvAmountLog = accountInvoiceSearch[0]['amount_total']
+                                                    accountInvoiceSearch[0]['invoice_date'] = date_submit
+                                                    accountInvoiceSearch[0]['invoice_date_due'] = date_submit
+                                                    if post_invoice == True:
+                                                        _logger.debug('account.move ==> action_post start')
+                                                        self.pool.get('account.move').action_post(
+                                                            accountInvoiceSearch)
+                                                        _logger.debug('account.move ==> action_post end')
 
-                                                    _logger.debug('account.move ==> action_post start')
-                                                    self.pool.get('account.move').action_post(
-                                                        accountInvoiceSearch)
-                                                    _logger.debug('account.move ==> action_post end')
-
-                                                    accountJournalSearch = self.env['account.journal'].search(
-                                                        [('name', '=', accountJournal)])
-                                                    _logger.debug(
-                                                        'accountJournal minds ! "%s"' % (str(accountJournalSearch)))
-
-                                                    if invoice_register_payment == True and accountJournalSearch is not None and accountJournalSearch != "":
+                                                        accountJournalSearch = self.env['account.journal'].search(
+                                                            [('name', '=', accountJournal)])
                                                         _logger.debug(
-                                                            'account.payment ==> action_validate_invoice_payment start')
-                                                        # accountInvoiceSearch.invoice_ids = [accountInvoiceSearch[0]['id']]
-                                                        # self.pool.get('account.payment').action_validate_invoice_payment(invoice_ids=[accountInvoiceSearch[0]['id']])
+                                                            'accountJournal minds ! "%s"' % (str(accountJournalSearch)))
 
-                                                        finalPaymentAmount = totalInvAmountLog
+                                                        if invoice_register_payment == True and accountJournalSearch is not None and accountJournalSearch != "":
+                                                            _logger.debug(
+                                                                'account.payment ==> action_validate_invoice_payment start')
+                                                            # accountInvoiceSearch.invoice_ids = [accountInvoiceSearch[0]['id']]
+                                                            # self.pool.get('account.payment').action_validate_invoice_payment(invoice_ids=[accountInvoiceSearch[0]['id']])
 
-                                                        if amountPaymentPercent is not None and amountPaymentPercent != "":
-                                                            if 0 < float(amountPaymentPercent) < 1:
-                                                                amountPaymentAfterApplyPercent = totalInvAmountLog * amountPaymentPercent
-                                                                finalPaymentAmount = amountPaymentAfterApplyPercent
-                                                                _logger.debug(
-                                                                    'finalPaymentAmount 0 < amountPaymentPercent < 1 minds ! "%s"' % (
-                                                                        str(finalPaymentAmount)))
-                                                            elif float(amountPaymentPercent) >= 1:
-                                                                finalPaymentAmount = totalInvAmountLog
-                                                                _logger.debug(
-                                                                    'finalPaymentAmount amountPaymentPercent >= 1 minds ! "%s"' % (
-                                                                        str(finalPaymentAmount)))
+                                                            finalPaymentAmount = totalInvAmountLog
+
+                                                            if amountPaymentPercent is not None and amountPaymentPercent != "":
+                                                                if 0 < float(amountPaymentPercent) < 1:
+                                                                    amountPaymentAfterApplyPercent = totalInvAmountLog * amountPaymentPercent
+                                                                    finalPaymentAmount = amountPaymentAfterApplyPercent
+                                                                    _logger.debug(
+                                                                        'finalPaymentAmount 0 < amountPaymentPercent < 1 minds ! "%s"' % (
+                                                                            str(finalPaymentAmount)))
+                                                                elif float(amountPaymentPercent) >= 1:
+                                                                    finalPaymentAmount = totalInvAmountLog
+                                                                    _logger.debug(
+                                                                        'finalPaymentAmount amountPaymentPercent >= 1 minds ! "%s"' % (
+                                                                            str(finalPaymentAmount)))
+                                                                else:
+                                                                    if float(amountPaymentMoney) >= float(totalInvAmountLog):
+                                                                        finalPaymentAmount = totalInvAmountLog
+                                                                        _logger.debug(
+                                                                            'finalPaymentAmount amountPaymentMoney >= totalInvAmountLog minds ! "%s"' % (
+                                                                                str(finalPaymentAmount)))
+                                                                    elif float(amountPaymentMoney) < float(totalInvAmountLog):
+                                                                        finalPaymentAmount = amountPaymentMoney
+                                                                        _logger.debug(
+                                                                            'finalPaymentAmount amountPaymentMoney < totalInvAmountLog minds ! "%s"' % (
+                                                                                str(finalPaymentAmount)))
+
                                                             else:
-                                                                if float(amountPaymentMoney) >= float(totalInvAmountLog):
-                                                                    finalPaymentAmount = totalInvAmountLog
-                                                                    _logger.debug(
-                                                                        'finalPaymentAmount amountPaymentMoney >= totalInvAmountLog minds ! "%s"' % (
-                                                                            str(finalPaymentAmount)))
-                                                                elif float(amountPaymentMoney) < float(totalInvAmountLog):
-                                                                    finalPaymentAmount = amountPaymentMoney
-                                                                    _logger.debug(
-                                                                        'finalPaymentAmount amountPaymentMoney < totalInvAmountLog minds ! "%s"' % (
-                                                                            str(finalPaymentAmount)))
+                                                                if amountPaymentMoney is not None and amountPaymentMoney != "":
+                                                                    if float(amountPaymentMoney) >= float(totalInvAmountLog):
+                                                                        finalPaymentAmount = totalInvAmountLog
+                                                                        _logger.debug(
+                                                                            'finalPaymentAmount else amountPaymentMoney >= totalInvAmountLog minds ! "%s"' % (
+                                                                                str(finalPaymentAmount)))
+                                                                    elif float(amountPaymentMoney) < float(totalInvAmountLog):
+                                                                        finalPaymentAmount = amountPaymentMoney
+                                                                        _logger.debug(
+                                                                            'finalPaymentAmount else amountPaymentMoney < totalInvAmountLog minds ! "%s"' % (
+                                                                                str(finalPaymentAmount)))
 
-                                                        else:
-                                                            if amountPaymentMoney is not None and amountPaymentMoney != "":
-                                                                if float(amountPaymentMoney) >= float(totalInvAmountLog):
-                                                                    finalPaymentAmount = totalInvAmountLog
-                                                                    _logger.debug(
-                                                                        'finalPaymentAmount else amountPaymentMoney >= totalInvAmountLog minds ! "%s"' % (
-                                                                            str(finalPaymentAmount)))
-                                                                elif float(amountPaymentMoney) < float(totalInvAmountLog):
-                                                                    finalPaymentAmount = amountPaymentMoney
-                                                                    _logger.debug(
-                                                                        'finalPaymentAmount else amountPaymentMoney < totalInvAmountLog minds ! "%s"' % (
-                                                                            str(finalPaymentAmount)))
-
-                                                        accountPayment = self.env['account.payment'].with_context(
-                                                            active_ids=[accountInvoiceSearch[0]['id']],
-                                                            active_id=accountInvoiceSearch[0]['id'],
-                                                            invoice_ids=[accountInvoiceSearch[0]['id']]).create({
-                                                            'payment_type': 'inbound',
-                                                            'partner_type': 'customer',
-                                                            'payment_method_id': 1,
-                                                            'journal_id': accountJournalSearch[0]['id'],
-                                                            # 'amount': accountInvoiceSearch[0]['amount_total'],
-                                                            'amount': finalPaymentAmount,
-                                                        })
-                                                        # inv = dict({"invoice_ids":accountInvoiceSearch[0]['id']})
-                                                        # _logger.debug('inv minds ! "%s"' % (str(inv.invoice_ids)))
-                                                        if accountPayment.payment_type == 'transfer':
-                                                            sequence_code = 'account.payment.transfer'
-                                                        else:
-                                                            if accountPayment.partner_type == 'customer':
-                                                                if accountPayment.payment_type == 'inbound':
-                                                                    sequence_code = 'account.payment.customer.invoice'
-                                                                if accountPayment.payment_type == 'outbound':
-                                                                    sequence_code = 'account.payment.customer.refund'
-                                                            if accountPayment.partner_type == 'supplier':
-                                                                if accountPayment.payment_type == 'inbound':
-                                                                    sequence_code = 'account.payment.supplier.refund'
-                                                                if accountPayment.payment_type == 'outbound':
-                                                                    sequence_code = 'account.payment.supplier.invoice'
-                                                        accountPayment.name = self.env['ir.sequence'].with_context(
-                                                            ir_sequence_date=accountPayment.payment_date).next_by_code(
-                                                            sequence_code)
-                                                        accountPayment.invoice_ids = [accountInvoiceSearch[0]['id']]
-                                                        accountPayment.post()
-                                                        # self.pool.get('account.payment').action_validate_invoice_payment(
-                                                        # self.env['account.payment'].search([('id', '=', int(accountPayment))]))
-                                                        _logger.debug(
-                                                            'account.payment ==> action_validate_invoice_payment end')
+                                                            accountPayment = self.env['account.payment'].with_context(
+                                                                active_ids=[accountInvoiceSearch[0]['id']],
+                                                                active_id=accountInvoiceSearch[0]['id'],
+                                                                invoice_ids=[accountInvoiceSearch[0]['id']]).create({
+                                                                'payment_type': 'inbound',
+                                                                'partner_type': 'customer',
+                                                                'payment_method_id': 1,
+                                                                'journal_id': accountJournalSearch[0]['id'],
+                                                                # 'amount': accountInvoiceSearch[0]['amount_total'],
+                                                                'amount': finalPaymentAmount,
+                                                            })
+                                                            # inv = dict({"invoice_ids":accountInvoiceSearch[0]['id']})
+                                                            # _logger.debug('inv minds ! "%s"' % (str(inv.invoice_ids)))
+                                                            if accountPayment.payment_type == 'transfer':
+                                                                sequence_code = 'account.payment.transfer'
+                                                            else:
+                                                                if accountPayment.partner_type == 'customer':
+                                                                    if accountPayment.payment_type == 'inbound':
+                                                                        sequence_code = 'account.payment.customer.invoice'
+                                                                    if accountPayment.payment_type == 'outbound':
+                                                                        sequence_code = 'account.payment.customer.refund'
+                                                                if accountPayment.partner_type == 'supplier':
+                                                                    if accountPayment.payment_type == 'inbound':
+                                                                        sequence_code = 'account.payment.supplier.refund'
+                                                                    if accountPayment.payment_type == 'outbound':
+                                                                        sequence_code = 'account.payment.supplier.invoice'
+                                                            accountPayment.name = self.env['ir.sequence'].with_context(
+                                                                ir_sequence_date=accountPayment.payment_date).next_by_code(
+                                                                sequence_code)
+                                                            accountPayment.invoice_ids = [accountInvoiceSearch[0]['id']]
+                                                            accountPayment.post()
+                                                            # self.pool.get('account.payment').action_validate_invoice_payment(
+                                                            # self.env['account.payment'].search([('id', '=', int(accountPayment))]))
+                                                            _logger.debug(
+                                                                'account.payment ==> action_validate_invoice_payment end')
 
                             no_succ_rec = no_succ_rec + 1
 
@@ -648,12 +736,15 @@ class saleAutomation(models.Model):
                                 'confirm_so': confirm_so,
                                 'validate_delivery': validate_delivery,
                                 'create_invoice': create_invoice,
+                                'post_invoice': post_invoice,
                                 'invoice_register_payment': invoice_register_payment,
                                 'account_journal': accountJournal,
                                 'payment_amount_money': amountPaymentMoney,
                                 'payment_amount_percent': amountPaymentPercent,
                                 'payment_amount_final': finalPaymentAmount,
                                 'status': 'Success',
+                                'date_submit': date_submit,
+                                'x_external_order_id': sameInvoice,
                             })
 
 
@@ -676,6 +767,7 @@ class saleAutomation(models.Model):
                             'inv_id': invoiceIdLog,
                             'confirm_so': confirm_so,
                             'validate_delivery': validate_delivery,
+                            'post_invoice': post_invoice,
                             'create_invoice': create_invoice,
                             'invoice_register_payment': invoice_register_payment,
                             'account_journal': accountJournal,
@@ -684,6 +776,8 @@ class saleAutomation(models.Model):
                             'payment_amount_final': finalPaymentAmount,
                             'status': 'Error',
                             'error': u'ERROR: {}'.format(e),
+                            'date_submit': date_submit,
+                            'x_external_order_id': sameInvoice,
                         })
                         pass
                         # raise ValidationError(u'ERROR: {}'.format(e))
