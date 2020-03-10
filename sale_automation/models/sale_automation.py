@@ -357,7 +357,7 @@ class saleAutomation(models.Model):
                         # _logger.debug('sheet.nrows minds ! "%s"' % (str(sheet.nrows)))
                         # _logger.debug('str(sheet.cell(row_no+1, 7).value) minds ! "%s"' % (str(sheet.cell(row_no+1, 7).value)))
                         # _logger.debug('lastOrderCheck minds ! "%s"' % (str(lastOrderCheck)))
-                        if row_no + 1 < sheet.nrows and str(sheet.cell(row_no + 1, 7).value) != lastOrderCheck:
+                        if row_no + 1 < sheet.nrows and str(int(sheet.cell(row_no + 1, 7).value)) != lastOrderCheck:
                             saleOrderSearch = self.env['sale.order'].search([('id', '=', createdOrderId)])
                             _logger.debug('saleOrderSearch minds ! "%s"' % (str(saleOrderSearch)))
                             if saleOrderSearch and confirm_so == True:
