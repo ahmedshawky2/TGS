@@ -105,7 +105,7 @@ class saleAutomation(models.Model):
 
                     if col == 7:
                         _logger.debug('Cell sameInvoice ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
-                        sameInvoice = str(sheet.cell(row_no, col).value)
+                        sameInvoice = str(int(sheet.cell(row_no, col).value))
 
 
                 if sameInvoice != lastOrderCheck:
@@ -303,7 +303,8 @@ class saleAutomation(models.Model):
 
                             elif col == 7:
                                 _logger.debug('Cell sameInvoice ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
-                                sameInvoice = str(sheet.cell(row_no, col).value)
+                                #sameInvoice = str(sheet.cell(row_no, col).value)
+                                sameInvoice = str(int(sheet.cell(row_no, col).value))
 
                             elif col == 8:
                                 _logger.debug('Cell accountJournal ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
@@ -329,7 +330,7 @@ class saleAutomation(models.Model):
                                 'partner_id': customerId,
                                 'user_id': salesPersonUserId,
                                 'date_order': date_submit,
-                                'x_external_order_id': sameInvoice,
+                                'x_external_order_id': str(sameInvoice),
                             })
 
                             createdOrderId = int(saleOrder)
@@ -548,7 +549,7 @@ class saleAutomation(models.Model):
                                 'payment_amount_final': finalPaymentAmount,
                                 'status': 'Success',
                                 'date_submit': date_submit,
-                                'x_external_order_id': sameInvoice,
+                                'x_external_order_id': str(sameInvoice),
                             })
 
 
@@ -730,7 +731,7 @@ class saleAutomation(models.Model):
                                 'product_desc': desc,
                                 'product_taxes': taxes,
                                 'sales_person': salesPersonUserId,
-                                'product_same_inv': sameInvoice,
+                                'product_same_inv': str(sameInvoice),
                                 'delivery_id': deliveryIdLog,
                                 'inv_id': invoiceIdLog,
                                 'confirm_so': confirm_so,
@@ -744,7 +745,7 @@ class saleAutomation(models.Model):
                                 'payment_amount_final': finalPaymentAmount,
                                 'status': 'Success',
                                 'date_submit': date_submit,
-                                'x_external_order_id': sameInvoice,
+                                'x_external_order_id': str(sameInvoice),
                             })
 
 
@@ -762,7 +763,7 @@ class saleAutomation(models.Model):
                             'product_desc': desc,
                             'product_taxes': taxes,
                             'sales_person': salesPersonUserId,
-                            'product_same_inv': sameInvoice,
+                            'product_same_inv': str(sameInvoice),
                             'delivery_id': deliveryIdLog,
                             'inv_id': invoiceIdLog,
                             'confirm_so': confirm_so,
@@ -777,7 +778,7 @@ class saleAutomation(models.Model):
                             'status': 'Error',
                             'error': u'ERROR: {}'.format(e),
                             'date_submit': date_submit,
-                            'x_external_order_id': sameInvoice,
+                            'x_external_order_id': str(sameInvoice),
                         })
                         pass
                         # raise ValidationError(u'ERROR: {}'.format(e))

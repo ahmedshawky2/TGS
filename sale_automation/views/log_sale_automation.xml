@@ -52,7 +52,7 @@
                                 <field name="product_taxes" readonly="1"/>
                                 <field name="product_unit_price" readonly="1"/>
                                 <field name="product_desc" readonly="1"/>
-                                <field name="product_same_inv" readonly="1"/>
+                                <field name="product_same_inv" invisible="1"/>
                                 <field name="sales_person" readonly="1"/>
                                 <field name="account_journal" readonly="1"/>
                                 <field name="payment_amount_money" readonly="1"/>
