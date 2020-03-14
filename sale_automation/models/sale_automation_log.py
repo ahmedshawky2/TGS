@@ -22,11 +22,15 @@ class saleAutomation(models.Model):
     status = fields.Selection([('New', 'New'), ('Success', 'Success'),('Error', 'Error')], string="Status", store=True,
                               required=False, index=True, track_visibility='onchange', default='New')
 
-    customer_id = fields.Many2one(comodel_name="res.partner", string="Customer", store=True, required=True, index=True)
+    customer_id = fields.Many2one(comodel_name="res.partner", string="Customer", store=True, required=False, index=True)
 
-    product_id = fields.Many2one(comodel_name="product.product", string="Product", store=True, required=True, index=True)
+    product_id = fields.Many2one(comodel_name="product.product", string="Product", store=True, required=False, index=True)
 
-    product_qty = fields.Char(string="Product Qty", store=True, required=True, index=True)
+    warehouse_id = fields.Many2one(comodel_name="stock.warehouse", string="Warehouse", store=True, required=False, index=True)
+
+    product_qty = fields.Char(string="Product Qty", store=True, required=False, index=True)
+
+    product_uom = fields.Many2one(comodel_name="uom.uom", string="Product UOM", store=True, required=False, index=True)
 
     product_unit_price = fields.Char(string="Product Unit Price", store=True, required=False, index=True)
 
@@ -36,9 +40,9 @@ class saleAutomation(models.Model):
 
     sales_person = fields.Many2one(comodel_name="res.users", string="Sales Person", store=True, required=False, index=True)
 
-    product_same_inv = fields.Char(string="Product Same Invoice", store=True, required=True, index=True)
+    product_same_inv = fields.Char(string="Product Same Invoice", store=True, required=False, index=True)
 
-    account_journal = fields.Char(string="Account Journal", store=True, required=True, index=True)
+    account_journal = fields.Char(string="Account Journal", store=True, required=False, index=True)
 
     payment_amount_money = fields.Char(string="Payment Amount Money", store=True, required=False, index=True)
 
@@ -65,7 +69,7 @@ class saleAutomation(models.Model):
     invoice_register_payment = fields.Boolean(string="Invoice Register Payment", store=True, index=True,
                                               track_visibility='onchange')
 
-    date_submit = fields.Datetime(string='Submit Date', required=True, index=True, default=fields.Datetime.now,
+    date_submit = fields.Datetime(string='Submit Date', required=False, index=True, default=fields.Datetime.now,
                                   help="Bulk automation Date")
 
     x_external_order_id = fields.Char(string="External Order Id", store=True, required=False, index=True,
@@ -95,6 +99,7 @@ class saleAutomation(models.Model):
             accountJournal = ""
             if self.account_journal != False:
                 accountJournal = self.account_journal
+
 
             if self.confirm_so == True:
                 saleOrderSearch = self.env['sale.order'].search([('id', '=', int(self.sale_order_id))])

@@ -13,7 +13,9 @@
                     <field name="date_submit" />
                     <field name="product_id"/>
                     <field name="product_qty"/>
+                    <field name="product_uom"/>
                     <field name="product_unit_price"/>
+                    <field name="warehouse_id"/>
                     <field name="account_journal" readonly="1"/>
                     <field name="status"/>
                     <field name="sale_order_id"/>
@@ -32,7 +34,7 @@
             <field name="model">sale_automation_log</field>
             <field name="type">form</field>
             <field name="arch" type="xml">
-                <form string="Sale Automation Log" create="false" edit="false" delete='false'>
+                <form string="Sale Automation Log" create="false" edit="true" delete='false'>
                     <sheet>
                         <div class="oe_button_box" name="button_box">
                             <header>
@@ -49,9 +51,11 @@
                                 <field name="date_submit" readonly="1"/>
                                 <field name="product_id" readonly="1"/>
                                 <field name="product_qty" readonly="1"/>
+                                <field name="product_uom" readonly="1"/>
                                 <field name="product_taxes" readonly="1"/>
                                 <field name="product_unit_price" readonly="1"/>
                                 <field name="product_desc" readonly="1"/>
+                                <field name="warehouse_id" readonly="1"/>
                                 <field name="product_same_inv" invisible="1"/>
                                 <field name="sales_person" readonly="1"/>
                                 <field name="account_journal" readonly="1"/>

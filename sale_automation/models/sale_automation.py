@@ -57,11 +57,11 @@ class saleAutomation(models.Model):
         for elem in self:
             total = 0.0
             sale_automation_log_money_total_rec = self.env['sale_automation_log'].search([('sale_automation', '=', elem.id)])
-            _logger.debug('sale_automation_log_money_total_rec minds ! "%s"' % (str(sale_automation_log_money_total_rec)))
+            _logger.info('sale_automation_log_money_total_rec minds ! "%s"' % (str(sale_automation_log_money_total_rec)))
             for rec in sale_automation_log_money_total_rec:
                 total = total + float(rec[0]['payment_amount_final'])
-                _logger.debug('total minds ! "%s"' % (str(total)))
-            _logger.debug('sale_automation_log_money_total minds ! "%s"' % (str(total)))
+                _logger.info('total minds ! "%s"' % (str(total)))
+            _logger.info('sale_automation_log_money_total minds ! "%s"' % (str(total)))
             elem.sale_automation_log_money_total = str(total)
 
 
@@ -81,14 +81,14 @@ class saleAutomation(models.Model):
     def testSA(self):
 
         inputx = BytesIO()
-        _logger.debug('inputx minds ! "%s"' % (str("inputx")))
+        _logger.info('inputx minds ! "%s"' % (str("inputx")))
         inputx.write(base64.decodestring(self.excel_file))
         book = xlrd.open_workbook(file_contents=inputx.getvalue())
-        _logger.debug('book minds ! "%s"' % (str(book)))
+        _logger.info('book minds ! "%s"' % (str(book)))
 
         # sheet = book.sheets()[0]
         sheet = book.sheet_by_index(0)
-        _logger.debug('sheet minds ! "%s"' % (str(sheet)))
+        _logger.info('sheet minds ! "%s"' % (str(sheet)))
 
         sameInvoice = None
         lastOrderCheck = None
@@ -103,14 +103,14 @@ class saleAutomation(models.Model):
 
                 for col in range(sheet.ncols):
 
-                    if col == 7:
-                        _logger.debug('Cell sameInvoice ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
+                    if col == 0:
+                        _logger.info('Cell sameInvoice ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
                         sameInvoice = str(int(sheet.cell(row_no, col).value))
 
 
                 if sameInvoice != lastOrderCheck:
                     saleOrderSearch = self.env['sale.order'].search([('x_external_order_id', '=', sameInvoice)])
-                    _logger.debug('saleOrderSearch minds ! "%s"' % (str(saleOrderSearch)))
+                    _logger.info('saleOrderSearch minds ! "%s"' % (str(saleOrderSearch)))
 
                     if saleOrderSearch:
                         finalRes = finalRes + "External order id: " + sameInvoice + " is assigned to Order: " + saleOrderSearch[0]['name'] + "\n"
@@ -137,16 +137,21 @@ class saleAutomation(models.Model):
         try:
 
             inputx = BytesIO()
-            _logger.debug('inputx minds ! "%s"' % (str("inputx")))
+            _logger.info('inputx minds ! "%s"' % (str("inputx")))
             inputx.write(base64.decodestring(self.excel_file))
             book = xlrd.open_workbook(file_contents=inputx.getvalue())
-            _logger.debug('book minds ! "%s"' % (str(book)))
+            _logger.info('book minds ! "%s"' % (str(book)))
 
             # sheet = book.sheets()[0]
             sheet = book.sheet_by_index(0)
-            _logger.debug('sheet minds ! "%s"' % (str(sheet)))
+            _logger.info('sheet minds ! "%s"' % (str(sheet)))
 
             customerName = None
+            customerExternalId = None
+            customerMobile = None
+            customerEmail = None
+            warehouseName = None
+            unitOfMeasure = None
             customerId = None
             product = None
             productId = None
@@ -215,10 +220,9 @@ class saleAutomation(models.Model):
             invoice_register_payment = self.invoice_register_payment
             post_invoice = self.post_invoice
 
-            product_uom = self.env['uom.uom'].search([('name', '=', 'Units')])
-            _logger.debug('product_uom minds ! "%s"' % (str(product_uom)))
-            product_uom_id = int(product_uom[0]['id'])
-            _logger.debug('product_uom_id minds ! "%s"' % (str(product_uom)))
+            product_uom = None
+            product_uom_id = None
+            warehouseId = None
 
             self.no_initial_rec = sheet.nrows
 
@@ -230,44 +234,73 @@ class saleAutomation(models.Model):
                     invoiceIdLog = None
                     try:
                         for col in range(sheet.ncols):
-                            if col == 0:
-                                _logger.debug('Cell customerName ! "%s"' % (
-                                            "Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(
-                                        sheet.cell(row_no, col).value)))
-                                customerName = str(sheet.cell(row_no, col).value)
 
-                                customerId = self.env['res.partner'].search([('name', '=', customerName)])
-                                customerId = customerId[0]['id']
-                                _logger.debug('customerId minds ! "%s"' % (str(customerId)))
+                            if col == 0:
+                                _logger.info('Cell sameInvoice ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
+                                sameInvoice = str(int(sheet.cell(row_no, col).value))
 
                             elif col == 1:
-                                _logger.debug('Cell product ! "%s"' % (
-                                        "Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(
-                                    sheet.cell(row_no, col).value)))
+                                _logger.info('Cell customerExternalId ! "%s"' % (
+                                            "Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
+
+                                customerExternalId = str(int(sheet.cell(row_no, col).value))
+
+                                if customerExternalId is None or customerExternalId == "":
+                                    raise ValidationError("Customer external id is empty for Row: " + str(row_no) + " & Column: " + str(col))
+
+                                customer = self.env['res.partner'].search([('ref', '=', customerExternalId)])
+                                _logger.info('customerId minds ! "%s"' % (str(customer)))
+
+                                if customer:
+                                    customerId = customer[0]['id']
+                                    customerName = customer[0]['name']
+                                    customerEmail = customer[0]['email']
+                                    customerMobile = customer[0]['mobile']
+                                else:
+                                    raise ValidationError("Customer external id: " + customerExternalId + " is not found for Row: " + str(row_no) + " & Column: " + str(col))
+
+                            elif col == 5:
+                                _logger.info('Cell product ! "%s"' % (
+                                        "Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
+
                                 product = str(sheet.cell(row_no, col).value)
 
                                 productProduct = self.env['product.product'].search([('default_code', '=', product)])
+
                                 productProductId = productProduct[0]['id']
-                                _logger.debug('productProductId minds ! "%s"' % (str(productProductId)))
+                                _logger.info('productProductId minds ! "%s"' % (str(productProductId)))
 
-                                # product = self.env['product.template'].search([('default_code', '=', product)])
-                                # productId = product[0]['id']
-                                # _logger.debug('productId minds ! "%s"' % (str(productId)))
-                                # productUnitPrice = product[0]['list_price']
                                 productUnitPrice = productProduct[0]['list_price']
-                                _logger.debug('productUnitPrice minds ! "%s"' % (str(productUnitPrice)))
-                                # productDesc = product[0]['name']
+                                _logger.info('productUnitPrice minds ! "%s"' % (str(productUnitPrice)))
                                 productDesc = productProduct[0]['display_name']
-                                _logger.debug('productDesc minds ! "%s"' % (str(productDesc)))
+                                _logger.info('productDesc minds ! "%s"' % (str(productDesc)))
 
 
-                            elif col == 2:
-                                _logger.debug('Cell qty ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(
+                            elif col == 6:
+                                _logger.info('Cell qty ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(
                                     sheet.cell(row_no, col).value)))
                                 qty = str(sheet.cell(row_no, col).value)
 
-                            elif col == 3:
-                                _logger.debug('Cell unitPrice ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(
+                            elif col == 7:
+                                _logger.info('Cell UOM ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(
+                                    sheet.cell(row_no, col).value)))
+
+                                unitOfMeasure = str(sheet.cell(row_no, col).value)
+
+                                if unitOfMeasure is None or unitOfMeasure == "":
+                                    unitOfMeasure = "Units"
+
+                                product_uom = self.env['uom.uom'].search([('name', '=', unitOfMeasure)])
+                                _logger.info('product_uom minds ! "%s"' % (str(product_uom)))
+                                if product_uom:
+                                    product_uom_id = int(product_uom[0]['id'])
+                                    _logger.info('product_uom_id minds ! "%s"' % (str(product_uom_id)))
+                                else:
+                                    raise ValidationError("UOM: " + unitOfMeasure + " for Row: " + str(row_no) + " & Column: " + str(col))
+
+
+                            elif col == 8:
+                                _logger.info('Cell unitPrice ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(
                                     sheet.cell(row_no, col).value)))
                                 unitPrice = str(sheet.cell(row_no, col).value)
 
@@ -275,53 +308,62 @@ class saleAutomation(models.Model):
                                     unitPrice = productUnitPrice
 
 
-                            elif col == 4:
-                                _logger.debug('Cell taxes ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
+                            elif col == 9:
+                                _logger.info('Cell taxes ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
                                 taxes = str(sheet.cell(row_no, col).value)
 
                                 if taxes is not None and taxes != "":
                                     taxes = int(float(taxes))
-                                    _logger.debug('taxes minds ! "%s"' % (str(taxes)))
+                                    _logger.info('taxes minds ! "%s"' % (str(taxes)))
 
-                            elif col == 5:
-                                _logger.debug('Cell desc ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
+                            elif col == 10:
+                                _logger.info('Cell desc ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
                                 desc = str(sheet.cell(row_no, col).value)
 
                                 if desc is None or desc == "":
                                     desc = productDesc
 
-                            elif col == 6:
-                                _logger.debug('Cell salesPerson ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
+                            elif col == 11:
+                                _logger.info('Cell Warehouse ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
+                                warehouseName = str(sheet.cell(row_no, col).value)
+
+                                if warehouseName is not None or warehouseName != "":
+                                    warehouse = self.env['stock.warehouse'].search([('name', '=', warehouseName)])
+                                    _logger.info('warehouse minds ! "%s"' % (str(warehouse)))
+                                    if warehouse:
+                                        warehouseId = int(warehouse[0]['id'])
+                                        _logger.info('warehouseId minds ! "%s"' % (str(warehouseId)))
+                                    else:
+                                        raise ValidationError("warehouse Name: " + warehouseName + " is not found for Row: " + str(row_no) + " & Column: " + str(col))
+                                else:
+                                    raise ValidationError("Warehouse is empty for Row: " + str(row_no) + " & Column: " + str(col))
+
+                            elif col == 12:
+                                _logger.info('Cell salesPerson ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
                                 salesPerson = str(sheet.cell(row_no, col).value)
 
                                 if salesPerson is not None and salesPerson != "":
-                                    salesPersonPartnerId = self.env['res.partner'].search([('name', '=', salesPerson)])
-                                    salesPersonPartnerId = salesPersonPartnerId[0]['id']
+                                    salesPersonPartner = self.env['res.partner'].search([('name', '=', salesPerson)])
 
-                                    salesPersonUserId = self.env['res.users'].search([('partner_id', '=', salesPersonPartnerId)])
-                                    salesPersonUserId = salesPersonUserId[0]['id']
+                                    if salesPersonPartner:
+                                        salesPersonPartnerId = salesPersonPartner[0]['id']
+                                        salesPersonUser = self.env['res.users'].search([('partner_id', '=', salesPersonPartnerId)])
 
-                            elif col == 7:
-                                _logger.debug('Cell sameInvoice ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
-                                #sameInvoice = str(sheet.cell(row_no, col).value)
-                                sameInvoice = str(int(sheet.cell(row_no, col).value))
+                                        if salesPersonUser:
+                                            salesPersonUserId = salesPersonUser[0]['id']
 
-                            elif col == 8:
-                                _logger.debug('Cell accountJournal ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
+                            elif col == 13:
+                                _logger.info('Cell accountJournal ! "%s"' % ("Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
                                 accountJournal = str(sheet.cell(row_no, col).value)
 
-                            elif col == 9:
-                                _logger.debug('Cell amountPaymentMoney ! "%s"' % (
-                                        "Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(
-                                    sheet.cell(row_no, col).value)))
-
+                            elif col == 14:
+                                _logger.info('Cell amountPaymentMoney ! "%s"' % (
+                                        "Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
                                 amountPaymentMoney = str(sheet.cell(row_no, col).value)
 
-                            elif col == 10:
-                                _logger.debug('Cell amountPaymentMoney ! "%s"' % (
-                                        "Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(
-                                    sheet.cell(row_no, col).value)))
-
+                            elif col == 15:
+                                _logger.info('Cell amountPaymentMoney ! "%s"' % (
+                                        "Row: " + str(row_no) + "   Col: " + str(col) + "   Cell Data: " + str(sheet.cell(row_no, col).value)))
                                 amountPaymentPercent = str(sheet.cell(row_no, col).value)
 
 
@@ -331,11 +373,12 @@ class saleAutomation(models.Model):
                                 'user_id': salesPersonUserId,
                                 'date_order': date_submit,
                                 'x_external_order_id': str(sameInvoice),
+                                'warehouse_id': warehouseId,
                             })
 
                             createdOrderId = int(saleOrder)
                             saleOrderIdLog = int(saleOrder)
-                            _logger.debug('createdOrderId minds ! "%s"' % (str(createdOrderId)))
+                            _logger.info('createdOrderId minds ! "%s"' % (str(createdOrderId)))
 
                         lastOrderCheck = sameInvoice
 
@@ -351,31 +394,31 @@ class saleAutomation(models.Model):
                         })
 
                         saleOrderLineCreatedId = int(saleOrderLine)
-                        _logger.debug('saleOrderLineCreatedId minds ! "%s"' % (str(saleOrderLineCreatedId)))
+                        _logger.info('saleOrderLineCreatedId minds ! "%s"' % (str(saleOrderLineCreatedId)))
 
-                        # _logger.debug('row_no+1 minds ! "%s"' % (str(row_no+1)))
-                        # _logger.debug('sheet.nrows minds ! "%s"' % (str(sheet.nrows)))
-                        # _logger.debug('str(sheet.cell(row_no+1, 7).value) minds ! "%s"' % (str(sheet.cell(row_no+1, 7).value)))
-                        # _logger.debug('lastOrderCheck minds ! "%s"' % (str(lastOrderCheck)))
-                        if row_no + 1 < sheet.nrows and str(int(sheet.cell(row_no + 1, 7).value)) != lastOrderCheck:
+                        # _logger.info('row_no+1 minds ! "%s"' % (str(row_no+1)))
+                        # _logger.info('sheet.nrows minds ! "%s"' % (str(sheet.nrows)))
+                        # _logger.info('str(sheet.cell(row_no+1, 0).value) minds ! "%s"' % (str(sheet.cell(row_no+1, 0).value)))
+                        # _logger.info('lastOrderCheck minds ! "%s"' % (str(lastOrderCheck)))
+                        if row_no + 1 < sheet.nrows and str(int(sheet.cell(row_no + 1, 0).value)) != lastOrderCheck:
                             saleOrderSearch = self.env['sale.order'].search([('id', '=', createdOrderId)])
-                            _logger.debug('saleOrderSearch minds ! "%s"' % (str(saleOrderSearch)))
+                            _logger.info('saleOrderSearch minds ! "%s"' % (str(saleOrderSearch)))
                             if saleOrderSearch and confirm_so == True:
                                 self.pool.get('sale.order').action_confirm(saleOrderSearch)
 
                                 saleOrderName = saleOrderSearch[0]['name']
-                                _logger.debug('saleOrderName minds ! "%s"' % (str(saleOrderName)))
+                                _logger.info('saleOrderName minds ! "%s"' % (str(saleOrderName)))
 
                                 saleOrderSearch[0]['date_order'] = date_submit
 
                                 if saleOrderName is not None and saleOrderName != "":
                                     stockPickingSearch = self.env['stock.picking'].search(
                                         [('origin', '=', saleOrderName)])
-                                    _logger.debug('stockPickingSearch minds ! "%s"' % (str(stockPickingSearch)))
+                                    _logger.info('stockPickingSearch minds ! "%s"' % (str(stockPickingSearch)))
 
                                     if stockPickingSearch:
                                         saleOrderDeliveryName = stockPickingSearch[0]['name']
-                                        _logger.debug(
+                                        _logger.info(
                                             'saleOrderDeliveryName minds ! "%s"' % (str(saleOrderDeliveryName)))
 
                                         if saleOrderDeliveryName is not None and saleOrderDeliveryName != "" and validate_delivery == True:
@@ -384,19 +427,19 @@ class saleAutomation(models.Model):
 
                                             stockPickingSearch[0]['scheduled_date'] = date_submit
 
-                                            _logger.debug(
+                                            _logger.info(
                                                 'saleOrderDeliveryId minds ! "%s"' % (str(saleOrderDeliveryId)))
 
                                             stockMoveSearch = self.env['stock.move'].search(
                                                 [('picking_id', '=', saleOrderDeliveryId)])
-                                            _logger.debug('stockMoveSearch minds ! "%s"' % (str(stockMoveSearch)))
+                                            _logger.info('stockMoveSearch minds ! "%s"' % (str(stockMoveSearch)))
 
                                             for stockMoveLine in stockMoveSearch:
-                                                _logger.debug('stockMoveLine minds ! "%s"' % (str(stockMoveLine)))
+                                                _logger.info('stockMoveLine minds ! "%s"' % (str(stockMoveLine)))
 
                                                 stockMoveLineSearch = self.env['stock.move.line'].search(
                                                     [('move_id', '=', stockMoveLine[0]['id'])])
-                                                _logger.debug(
+                                                _logger.info(
                                                     'stockMoveLineSearch minds ! "%s"' % (str(stockMoveLineSearch)))
 
                                                 if stockMoveLineSearch:
@@ -404,29 +447,29 @@ class saleAutomation(models.Model):
                                                     stockMoveLineSearch[0]['qty_done'] = stockMoveLineSearch[0][
                                                         'product_uom_qty']
 
-                                            _logger.debug('stock.picking ==> button_validate start')
+                                            _logger.info('stock.picking ==> button_validate start')
                                             self.pool.get('stock.picking').button_validate(stockPickingSearch)
-                                            _logger.debug('stock.picking ==> button_validate end')
+                                            _logger.info('stock.picking ==> button_validate end')
 
                                             stockPickingSearch[0]['date_done'] = date_submit
 
                                             if create_invoice == True:
-                                                _logger.debug('sale.advance.payment.inv ==> create_invoices start')
+                                                _logger.info('sale.advance.payment.inv ==> create_invoices start')
                                                 # self.pool.get('sale.advance.payment.inv').create_invoices(saleOrderSearch)
                                                 payment = self.env['sale.advance.payment.inv'].with_context(
                                                     active_ids=[createdOrderId]).create({
                                                     'advance_payment_method': 'delivered'
                                                 })
                                                 payment.create_invoices()
-                                                _logger.debug('sale.advance.payment.inv ==> create_invoices end')
+                                                _logger.info('sale.advance.payment.inv ==> create_invoices end')
 
                                                 accountInvoiceSearch = self.env['account.move'].search(
                                                     [('invoice_origin', '=', saleOrderName)])
-                                                _logger.debug(
+                                                _logger.info(
                                                     'accountInvoiceSearch minds ! "%s"' % (str(accountInvoiceSearch)))
 
                                                 if accountInvoiceSearch:
-                                                    _logger.debug('accountInvoiceSearch minds ! "%s"' % (
+                                                    _logger.info('accountInvoiceSearch minds ! "%s"' % (
                                                         str(accountInvoiceSearch[0]['id'])))
 
                                                     invoiceIdLog = accountInvoiceSearch[0]['id']
@@ -434,18 +477,18 @@ class saleAutomation(models.Model):
                                                     accountInvoiceSearch[0]['invoice_date'] = date_submit
                                                     accountInvoiceSearch[0]['invoice_date_due'] = date_submit
                                                     if post_invoice == True:
-                                                        _logger.debug('account.move ==> action_post start')
+                                                        _logger.info('account.move ==> action_post start')
                                                         self.pool.get('account.move').action_post(
                                                             accountInvoiceSearch)
-                                                        _logger.debug('account.move ==> action_post end')
+                                                        _logger.info('account.move ==> action_post end')
 
                                                         accountJournalSearch = self.env['account.journal'].search(
                                                             [('name', '=', accountJournal)])
-                                                        _logger.debug('accountJournal minds ! "%s"' % (str(accountJournalSearch)))
+                                                        _logger.info('accountJournal minds ! "%s"' % (str(accountJournalSearch)))
 
 
                                                         if invoice_register_payment == True and accountJournalSearch is not None and accountJournalSearch != "":
-                                                            _logger.debug(
+                                                            _logger.info(
                                                                 'account.payment ==> action_validate_invoice_payment start')
                                                             # accountInvoiceSearch.invoice_ids = [accountInvoiceSearch[0]['id']]
                                                             # self.pool.get('account.payment').action_validate_invoice_payment(invoice_ids=[accountInvoiceSearch[0]['id']])
@@ -456,21 +499,21 @@ class saleAutomation(models.Model):
                                                                 if 0 < float(amountPaymentPercent) < 1:
                                                                     amountPaymentAfterApplyPercent = totalInvAmountLog * amountPaymentPercent
                                                                     finalPaymentAmount = amountPaymentAfterApplyPercent
-                                                                    _logger.debug('finalPaymentAmount 0 < amountPaymentPercent < 1 minds ! "%s"' % (str(finalPaymentAmount)))
+                                                                    _logger.info('finalPaymentAmount 0 < amountPaymentPercent < 1 minds ! "%s"' % (str(finalPaymentAmount)))
                                                                 elif float(amountPaymentPercent) >= 1:
                                                                     finalPaymentAmount = totalInvAmountLog
-                                                                    _logger.debug(
+                                                                    _logger.info(
                                                                         'finalPaymentAmount amountPaymentPercent >= 1 minds ! "%s"' % (
                                                                             str(finalPaymentAmount)))
                                                                 else:
                                                                     if float(amountPaymentMoney) >= float(totalInvAmountLog):
                                                                         finalPaymentAmount = totalInvAmountLog
-                                                                        _logger.debug(
+                                                                        _logger.info(
                                                                             'finalPaymentAmount amountPaymentMoney >= totalInvAmountLog minds ! "%s"' % (
                                                                                 str(finalPaymentAmount)))
                                                                     elif float(amountPaymentMoney) < float(totalInvAmountLog):
                                                                         finalPaymentAmount = amountPaymentMoney
-                                                                        _logger.debug(
+                                                                        _logger.info(
                                                                             'finalPaymentAmount amountPaymentMoney < totalInvAmountLog minds ! "%s"' % (
                                                                                 str(finalPaymentAmount)))
 
@@ -478,12 +521,12 @@ class saleAutomation(models.Model):
                                                                 if amountPaymentMoney is not None and amountPaymentMoney != "":
                                                                     if float(amountPaymentMoney) >= float(totalInvAmountLog):
                                                                         finalPaymentAmount = totalInvAmountLog
-                                                                        _logger.debug(
+                                                                        _logger.info(
                                                                             'finalPaymentAmount else amountPaymentMoney >= totalInvAmountLog minds ! "%s"' % (
                                                                                 str(finalPaymentAmount)))
                                                                     elif float(amountPaymentMoney) < float(totalInvAmountLog):
                                                                         finalPaymentAmount = amountPaymentMoney
-                                                                        _logger.debug(
+                                                                        _logger.info(
                                                                             'finalPaymentAmount else amountPaymentMoney < totalInvAmountLog minds ! "%s"' % (
                                                                                 str(finalPaymentAmount)))
 
@@ -500,7 +543,7 @@ class saleAutomation(models.Model):
                                                                 'amount': finalPaymentAmount,
                                                             })
                                                             # inv = dict({"invoice_ids":accountInvoiceSearch[0]['id']})
-                                                            # _logger.debug('inv minds ! "%s"' % (str(inv.invoice_ids)))
+                                                            # _logger.info('inv minds ! "%s"' % (str(inv.invoice_ids)))
                                                             if accountPayment.payment_type == 'transfer':
                                                                 sequence_code = 'account.payment.transfer'
                                                             else:
@@ -521,7 +564,7 @@ class saleAutomation(models.Model):
                                                             accountPayment.post()
                                                             # self.pool.get('account.payment').action_validate_invoice_payment(
                                                             # self.env['account.payment'].search([('id', '=', int(accountPayment))]))
-                                                            _logger.debug('account.payment ==> action_validate_invoice_payment end')
+                                                            _logger.info('account.payment ==> action_validate_invoice_payment end')
 
                             no_succ_rec = no_succ_rec + 1
 
@@ -550,47 +593,49 @@ class saleAutomation(models.Model):
                                 'status': 'Success',
                                 'date_submit': date_submit,
                                 'x_external_order_id': str(sameInvoice),
+                                'warehouse_id': warehouseId,
+                                'product_uom': product_uom_id,
                             })
 
 
                         if row_no + 1 == sheet.nrows:
                             saleOrderSearch = self.env['sale.order'].search([('id', '=', createdOrderId)])
-                            _logger.debug('saleOrderSearch minds ! "%s"' % (str(saleOrderSearch)))
+                            _logger.info('saleOrderSearch minds ! "%s"' % (str(saleOrderSearch)))
                             if saleOrderSearch and confirm_so == True:
                                 self.pool.get('sale.order').action_confirm(saleOrderSearch)
 
                                 saleOrderName = saleOrderSearch[0]['name']
-                                _logger.debug('saleOrderName minds ! "%s"' % (str(saleOrderName)))
+                                _logger.info('saleOrderName minds ! "%s"' % (str(saleOrderName)))
 
                                 saleOrderSearch[0]['date_order'] = date_submit
 
                                 if saleOrderName is not None and saleOrderName != "":
                                     stockPickingSearch = self.env['stock.picking'].search(
                                         [('origin', '=', saleOrderName)])
-                                    _logger.debug('stockPickingSearch minds ! "%s"' % (str(stockPickingSearch)))
+                                    _logger.info('stockPickingSearch minds ! "%s"' % (str(stockPickingSearch)))
 
                                     if stockPickingSearch:
                                         saleOrderDeliveryName = stockPickingSearch[0]['name']
-                                        _logger.debug(
+                                        _logger.info(
                                             'saleOrderDeliveryName minds ! "%s"' % (str(saleOrderDeliveryName)))
 
                                         if saleOrderDeliveryName is not None and saleOrderDeliveryName != "" and validate_delivery == True:
                                             saleOrderDeliveryId = stockPickingSearch[0]['id']
                                             deliveryIdLog = stockPickingSearch[0]['id']
                                             stockPickingSearch[0]['scheduled_date'] = date_submit
-                                            _logger.debug(
+                                            _logger.info(
                                                 'saleOrderDeliveryId minds ! "%s"' % (str(saleOrderDeliveryId)))
 
                                             stockMoveSearch = self.env['stock.move'].search(
                                                 [('picking_id', '=', saleOrderDeliveryId)])
-                                            _logger.debug('stockMoveSearch minds ! "%s"' % (str(stockMoveSearch)))
+                                            _logger.info('stockMoveSearch minds ! "%s"' % (str(stockMoveSearch)))
 
                                             for stockMoveLine in stockMoveSearch:
-                                                _logger.debug('stockMoveLine minds ! "%s"' % (str(stockMoveLine)))
+                                                _logger.info('stockMoveLine minds ! "%s"' % (str(stockMoveLine)))
 
                                                 stockMoveLineSearch = self.env['stock.move.line'].search(
                                                     [('move_id', '=', stockMoveLine[0]['id'])])
-                                                _logger.debug(
+                                                _logger.info(
                                                     'stockMoveLineSearch minds ! "%s"' % (str(stockMoveLineSearch)))
 
                                                 if stockMoveLineSearch:
@@ -598,29 +643,29 @@ class saleAutomation(models.Model):
                                                     stockMoveLineSearch[0]['qty_done'] = stockMoveLineSearch[0][
                                                         'product_uom_qty']
 
-                                            _logger.debug('stock.picking ==> button_validate start')
+                                            _logger.info('stock.picking ==> button_validate start')
                                             self.pool.get('stock.picking').button_validate(stockPickingSearch)
-                                            _logger.debug('stock.picking ==> button_validate end')
+                                            _logger.info('stock.picking ==> button_validate end')
 
                                             stockPickingSearch[0]['date_done'] = date_submit
 
                                             if create_invoice == True:
-                                                _logger.debug('sale.advance.payment.inv ==> create_invoices start')
+                                                _logger.info('sale.advance.payment.inv ==> create_invoices start')
                                                 # self.pool.get('sale.advance.payment.inv').create_invoices(saleOrderSearch)
                                                 payment = self.env['sale.advance.payment.inv'].with_context(
                                                     active_ids=[createdOrderId]).create({
                                                     'advance_payment_method': 'delivered'
                                                 })
                                                 payment.create_invoices()
-                                                _logger.debug('sale.advance.payment.inv ==> create_invoices end')
+                                                _logger.info('sale.advance.payment.inv ==> create_invoices end')
 
                                                 accountInvoiceSearch = self.env['account.move'].search(
                                                     [('invoice_origin', '=', saleOrderName)])
-                                                _logger.debug(
+                                                _logger.info(
                                                     'accountInvoiceSearch minds ! "%s"' % (str(accountInvoiceSearch)))
 
                                                 if accountInvoiceSearch:
-                                                    _logger.debug('accountInvoiceSearch minds ! "%s"' % (
+                                                    _logger.info('accountInvoiceSearch minds ! "%s"' % (
                                                         str(accountInvoiceSearch[0]['id'])))
 
                                                     invoiceIdLog = accountInvoiceSearch[0]['id']
@@ -628,18 +673,18 @@ class saleAutomation(models.Model):
                                                     accountInvoiceSearch[0]['invoice_date'] = date_submit
                                                     accountInvoiceSearch[0]['invoice_date_due'] = date_submit
                                                     if post_invoice == True:
-                                                        _logger.debug('account.move ==> action_post start')
+                                                        _logger.info('account.move ==> action_post start')
                                                         self.pool.get('account.move').action_post(
                                                             accountInvoiceSearch)
-                                                        _logger.debug('account.move ==> action_post end')
+                                                        _logger.info('account.move ==> action_post end')
 
                                                         accountJournalSearch = self.env['account.journal'].search(
                                                             [('name', '=', accountJournal)])
-                                                        _logger.debug(
+                                                        _logger.info(
                                                             'accountJournal minds ! "%s"' % (str(accountJournalSearch)))
 
                                                         if invoice_register_payment == True and accountJournalSearch is not None and accountJournalSearch != "":
-                                                            _logger.debug(
+                                                            _logger.info(
                                                                 'account.payment ==> action_validate_invoice_payment start')
                                                             # accountInvoiceSearch.invoice_ids = [accountInvoiceSearch[0]['id']]
                                                             # self.pool.get('account.payment').action_validate_invoice_payment(invoice_ids=[accountInvoiceSearch[0]['id']])
@@ -650,23 +695,23 @@ class saleAutomation(models.Model):
                                                                 if 0 < float(amountPaymentPercent) < 1:
                                                                     amountPaymentAfterApplyPercent = totalInvAmountLog * amountPaymentPercent
                                                                     finalPaymentAmount = amountPaymentAfterApplyPercent
-                                                                    _logger.debug(
+                                                                    _logger.info(
                                                                         'finalPaymentAmount 0 < amountPaymentPercent < 1 minds ! "%s"' % (
                                                                             str(finalPaymentAmount)))
                                                                 elif float(amountPaymentPercent) >= 1:
                                                                     finalPaymentAmount = totalInvAmountLog
-                                                                    _logger.debug(
+                                                                    _logger.info(
                                                                         'finalPaymentAmount amountPaymentPercent >= 1 minds ! "%s"' % (
                                                                             str(finalPaymentAmount)))
                                                                 else:
                                                                     if float(amountPaymentMoney) >= float(totalInvAmountLog):
                                                                         finalPaymentAmount = totalInvAmountLog
-                                                                        _logger.debug(
+                                                                        _logger.info(
                                                                             'finalPaymentAmount amountPaymentMoney >= totalInvAmountLog minds ! "%s"' % (
                                                                                 str(finalPaymentAmount)))
                                                                     elif float(amountPaymentMoney) < float(totalInvAmountLog):
                                                                         finalPaymentAmount = amountPaymentMoney
-                                                                        _logger.debug(
+                                                                        _logger.info(
                                                                             'finalPaymentAmount amountPaymentMoney < totalInvAmountLog minds ! "%s"' % (
                                                                                 str(finalPaymentAmount)))
 
@@ -674,12 +719,12 @@ class saleAutomation(models.Model):
                                                                 if amountPaymentMoney is not None and amountPaymentMoney != "":
                                                                     if float(amountPaymentMoney) >= float(totalInvAmountLog):
                                                                         finalPaymentAmount = totalInvAmountLog
-                                                                        _logger.debug(
+                                                                        _logger.info(
                                                                             'finalPaymentAmount else amountPaymentMoney >= totalInvAmountLog minds ! "%s"' % (
                                                                                 str(finalPaymentAmount)))
                                                                     elif float(amountPaymentMoney) < float(totalInvAmountLog):
                                                                         finalPaymentAmount = amountPaymentMoney
-                                                                        _logger.debug(
+                                                                        _logger.info(
                                                                             'finalPaymentAmount else amountPaymentMoney < totalInvAmountLog minds ! "%s"' % (
                                                                                 str(finalPaymentAmount)))
 
@@ -695,7 +740,7 @@ class saleAutomation(models.Model):
                                                                 'amount': finalPaymentAmount,
                                                             })
                                                             # inv = dict({"invoice_ids":accountInvoiceSearch[0]['id']})
-                                                            # _logger.debug('inv minds ! "%s"' % (str(inv.invoice_ids)))
+                                                            # _logger.info('inv minds ! "%s"' % (str(inv.invoice_ids)))
                                                             if accountPayment.payment_type == 'transfer':
                                                                 sequence_code = 'account.payment.transfer'
                                                             else:
@@ -716,7 +761,7 @@ class saleAutomation(models.Model):
                                                             accountPayment.post()
                                                             # self.pool.get('account.payment').action_validate_invoice_payment(
                                                             # self.env['account.payment'].search([('id', '=', int(accountPayment))]))
-                                                            _logger.debug(
+                                                            _logger.info(
                                                                 'account.payment ==> action_validate_invoice_payment end')
 
                             no_succ_rec = no_succ_rec + 1
@@ -746,11 +791,13 @@ class saleAutomation(models.Model):
                                 'status': 'Success',
                                 'date_submit': date_submit,
                                 'x_external_order_id': str(sameInvoice),
+                                'warehouse_id': warehouseId,
+                                'product_uom': product_uom_id,
                             })
 
 
                     except Exception as e:
-                        _logger.debug(u'ERROR: {}'.format(e))
+                        _logger.info(u'ERROR: {}'.format(e))
                         checkPartialSuccess = True
                         self.status = 'Partial Success'
                         saleAutomationId = self.env['sale_automation_log'].create({
@@ -779,6 +826,8 @@ class saleAutomation(models.Model):
                             'error': u'ERROR: {}'.format(e),
                             'date_submit': date_submit,
                             'x_external_order_id': str(sameInvoice),
+                            'warehouse_id': warehouseId,
+                            'product_uom': product_uom_id,
                         })
                         pass
                         # raise ValidationError(u'ERROR: {}'.format(e))
@@ -787,10 +836,16 @@ class saleAutomation(models.Model):
             if checkPartialSuccess == False:
                 self.status = 'Success'
         except Exception as e:
-            _logger.debug(u'ERROR: {}'.format(e))
+            _logger.info(u'ERROR: {}'.format(e))
             self.status = 'Error'
             self.error = u'ERROR: {}'.format(e)
             self.no_success_rec = no_succ_rec
+
+        #except ValidationError as e:
+            #_logger.info(u'ERROR: {}'.format(e))
+            #self.status = 'Error'
+            #self.error = u'ERROR: {}'.format(e)
+            #self.no_success_rec = no_succ_rec
 
 
     def checkSA(self):
