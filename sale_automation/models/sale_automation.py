@@ -189,6 +189,8 @@ class saleAutomation(models.Model):
 
             finalPaymentAmount = None
 
+            productEmptyError = None
+
 
             no_succ_rec = 0
 
@@ -246,6 +248,7 @@ class saleAutomation(models.Model):
                                 customerExternalId = str(int(sheet.cell(row_no, col).value))
 
                                 if customerExternalId is None or customerExternalId == "":
+                                    saleOrderIdLog = None
                                     raise ValidationError("Customer external id is empty for Row: " + str(row_no) + " & Column: " + str(col))
 
                                 customer = self.env['res.partner'].search([('ref', '=', customerExternalId)])
@@ -257,6 +260,7 @@ class saleAutomation(models.Model):
                                     customerEmail = customer[0]['email']
                                     customerMobile = customer[0]['mobile']
                                 else:
+                                    saleOrderIdLog = None
                                     raise ValidationError("Customer external id: " + customerExternalId + " is not found for Row: " + str(row_no) + " & Column: " + str(col))
 
                             elif col == 5:
@@ -267,13 +271,18 @@ class saleAutomation(models.Model):
 
                                 productProduct = self.env['product.product'].search([('default_code', '=', product)])
 
-                                productProductId = productProduct[0]['id']
-                                _logger.info('productProductId minds ! "%s"' % (str(productProductId)))
+                                if productProduct:
+                                    productProductId = productProduct[0]['id']
+                                    _logger.info('productProductId minds ! "%s"' % (str(productProductId)))
 
-                                productUnitPrice = productProduct[0]['list_price']
-                                _logger.info('productUnitPrice minds ! "%s"' % (str(productUnitPrice)))
-                                productDesc = productProduct[0]['display_name']
-                                _logger.info('productDesc minds ! "%s"' % (str(productDesc)))
+                                    productUnitPrice = productProduct[0]['list_price']
+                                    _logger.info('productUnitPrice minds ! "%s"' % (str(productUnitPrice)))
+                                    productDesc = productProduct[0]['display_name']
+                                    _logger.info('productDesc minds ! "%s"' % (str(productDesc)))
+
+                                else:
+                                    saleOrderIdLog = None
+                                    raise ValidationError("Product is empty or wrong for Row: " + str(row_no) + " & Column: " + str(col))
 
 
                             elif col == 6:
@@ -296,6 +305,7 @@ class saleAutomation(models.Model):
                                     product_uom_id = int(product_uom[0]['id'])
                                     _logger.info('product_uom_id minds ! "%s"' % (str(product_uom_id)))
                                 else:
+                                    saleOrderIdLog = None
                                     raise ValidationError("UOM: " + unitOfMeasure + " for Row: " + str(row_no) + " & Column: " + str(col))
 
 
@@ -334,8 +344,10 @@ class saleAutomation(models.Model):
                                         warehouseId = int(warehouse[0]['id'])
                                         _logger.info('warehouseId minds ! "%s"' % (str(warehouseId)))
                                     else:
+                                        saleOrderIdLog = None
                                         raise ValidationError("warehouse Name: " + warehouseName + " is not found for Row: " + str(row_no) + " & Column: " + str(col))
                                 else:
+                                    saleOrderIdLog = None
                                     raise ValidationError("Warehouse is empty for Row: " + str(row_no) + " & Column: " + str(col))
 
                             elif col == 12:
