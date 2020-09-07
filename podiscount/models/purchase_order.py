@@ -31,6 +31,7 @@ class purchase_order (models.Model):
             'default_company_id': self.company_id.id,
             'default_purchase_id': self.id,
             'default_x_discount': self.x_discount,
+            'default_invoice_origin': self.name,
         }
         # choose the view_mode accordingly
         if len(self.invoice_ids) > 1 and not create_bill:
